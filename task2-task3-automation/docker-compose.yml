@@ -1,0 +1,28 @@
+services:
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      # PetClinic runs as its own separate `docker compose` stack, publishing
+      # its ports to the host. host.docker.internal reaches those published
+      # ports from inside this container without coupling to PetClinic's own
+      # internal Docker network name. Override in a local .env file (copy
+      # .env.example) if PetClinic runs somewhere else (a different host,
+      # a different port, a remote environment, etc.).
+      UI_BASE_URL: ${UI_BASE_URL:-http://host.docker.internal:8081}
+      API_BASE_URL: ${API_BASE_URL:-http://host.docker.internal:8080}
+      PETCLINIC_ADMIN_USERNAME: ${PETCLINIC_ADMIN_USERNAME:-admin}
+      PETCLINIC_ADMIN_PASSWORD: ${PETCLINIC_ADMIN_PASSWORD:-admin123}
+      # UI_BROWSER_URL deliberately NOT overridden — it stays "http://localhost:8081"
+      # (its default) so the browser's Origin header is one PetClinic's CORS policy
+      # accepts. PLAYWRIGHT_RESOLVE_LOCALHOST_TO is what actually redirects that
+      # browser-side "localhost" to reach this container's host machine — see
+      # PetClinicPageTest.cs for the full explanation of why both are needed.
+      PLAYWRIGHT_RESOLVE_LOCALHOST_TO: host.docker.internal
+    extra_hosts:
+      # host.docker.internal is automatic on Docker Desktop (Mac/Windows).
+      # Native Linux Docker needs this explicit mapping instead.
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./testresults:/app/testresults

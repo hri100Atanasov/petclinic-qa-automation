@@ -1,0 +1,4 @@
+# Shell scripts get COPY'd into a Linux Docker image and executed there —
+# force LF regardless of core.autocrlf, or a CRLF checkout breaks the
+# container's shebang line at runtime.
+*.sh text eol=lf
