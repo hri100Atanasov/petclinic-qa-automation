@@ -1,0 +1,16 @@
+# .NET build output
+bin/
+obj/
+
+# Test results (generated on each run; keep the directory, not its contents)
+task2-task3-automation/testresults/*
+!task2-task3-automation/testresults/.gitkeep
+
+# Local environment overrides (may contain machine-specific values)
+.env
+
+# OS/editor cruft
+.DS_Store
+Thumbs.db
+.vs/
+.idea/
