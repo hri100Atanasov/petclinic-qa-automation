@@ -464,3 +464,277 @@ attribution from `test-plan.md` §5 and S11/S12/S13 — the who-did-what split b
 tested and how (UI-first exploration, direct API testing for boundary conditions), in one voice,
 matching how a real single-author test plan reads. Checked `scenarios-full.md` for the same
 pattern — already clean, no changes needed there.
+
+---
+
+## Task 2 & 3 — UI and API test automation (dockerized foundation)
+
+**Prompt 23:**
+
+```
+How I picture it going forward.
+
+I want to use Playwright with .net/c# for the UI testing regarding Task 2. I have checked about Playwright image with dotnet and found that Base image: mcr.microsoft.com/playwright/dotnet — must match the Microsoft.Playwright NuGet version exactly, or you get browser/driver mismatches at runtime.
+
+I want to use RestSharp for the API testing regarding Task 3. Both using NUnit.
+
+I want to have a project that will be dockerized and as per the requirements, one will be able to start either the UI tests, the API tests or both.
+
+Concerns:
+The project should be executable under Mac OS as well as windows, just like the PetClinic project.
+Also the project should align with the requirements from Task 5 of the assignment.
+
+Prior to executing the tests there should be a check that the PetClinic project is up and running so that the tests could be executed against it, if the project is not up and running a message for running the project is visualized on the console for starting the PetClinic project and then try again.
+
+Test report with passed and failed tests will be visualized in the console for now, UI/HTML visualization might be considered later on.
+
+For now main focus is the building of the project, dockerizing it, and successfully executing a single UI and API test (login a user) agains the application to verify everything works. The specific test suits will be focused after a successful test of the whole setup.
+
+List any concerns, questions, suggestions before starting the task.
+```
+
+Researched current stable versions via web search before answering (Microsoft.Playwright 1.62.0,
+matching `mcr.microsoft.com/playwright/dotnet:v1.62.0-noble`, RestSharp 114.0.0, NUnit 4.6.1) so
+the plan wasn't anchored to stale training-data version numbers. Responded with concerns (Docker
+networking between the test container and PetClinic's separately-run compose stack — recommended
+`host.docker.internal` + published ports over joining PetClinic's internal network or
+`--network host`, which isn't reliable on Docker Desktop; the NuGet/image version-pin risk the
+candidate already flagged, plus enforcing it rather than just documenting it), five clarifying
+questions (project structure, health-check retry behavior, which suite(s) the check should gate,
+fail-fast vs. run-both-and-report, repo folder layout), and suggestions (health check as a C#
+`OneTimeSetUp` rather than a shell script, emit `.trx` now even though only console output was
+asked for, carry forward Task 1's fresh-data-over-fixed-IDs principle).
+
+**Prompt 24:**
+
+```
+Go with the host.docker.internal + published ports
+
+1. Solution with two projects
+2. Implement the check as a c# OneTimeSetUp. Do it with no retry for now.
+3. Only what's relevant
+4. Run both and report both
+5. One directory holding the solution - task2-task3-automation/
+
+
+Make the .trx file emit now.
+Use environment variables with default values as they are right now.
+```
+
+Scaffolded `task2-task3-automation/`: a solution with `PetClinic.Tests.Shared` (config +
+health-check), `PetClinic.Tests.Ui` (Playwright + NUnit), `PetClinic.Tests.Api` (RestSharp +
+NUnit), all on .NET 10, versions pinned to what was verified in Prompt 23. Wrote a single login
+smoke test per suite, a Dockerfile on `mcr.microsoft.com/playwright/dotnet:v1.62.0-noble`, an
+entrypoint script selecting `ui`/`api`/`all`, and a `docker-compose.yml`. Verified everything by
+actually running it — locally via `dotnet test` and inside Docker via `docker compose run` —
+against the real running PetClinic instance, not just by inspecting the code.
+
+**What the model got wrong, caught by actually running it (not just written, but executed and
+observed to fail before being fixed):**
+
+1. **The `[SetUpFixture]` health-check gate silently never ran.** First implementation put
+   `AssemblySetup` in a `*.Setup` namespace, sibling to the `*.Tests` namespace containing the
+   actual tests. NUnit only applies a `SetUpFixture`'s `OneTimeSetUp` to tests in the *same or a
+   descendant* namespace — sibling namespaces don't count. Confirmed by deliberately pointing
+   `API_BASE_URL` at a dead port and observing the test itself fail with a raw connection error
+   instead of the intended friendly "PetClinic isn't running" message. Fixed by declaring the
+   fixture in the global namespace (no `namespace` line), which applies assembly-wide regardless
+   of the tests' own namespace — then re-verified the gate actually fires with the friendly
+   message, and that the happy path still passes.
+
+2. **PetClinic's backend rejects the CORS `Origin: host.docker.internal` header (403 Invalid CORS
+   request) but accepts `Origin: http://localhost:8081`.** Not anticipated going in — discovered
+   only by actually running the UI test inside the Docker container: the login page loaded fine
+   (proving `host.docker.internal` networking itself worked), but clicking "Sign in" produced a
+   "Could not reach the server" error from the app's own UI. Added temporary request/response
+   logging to the test to see the real failing call, which showed a same-origin relative
+   `/api/auth/login` request (not a hardcoded `localhost:8080` call, as first assumed) returning
+   `403`. Confirmed the root cause directly with curl, varying only the `Origin` header against
+   the real API (`Origin: http://host.docker.internal:8081` → 403 "Invalid CORS request",
+   `Origin: http://localhost:8081` → 200) before writing any fix, rather than guessing. Fixed by
+   keeping the browser's navigation target as `http://localhost:8081` and adding a Chromium
+   `--host-resolver-rules=MAP localhost host.docker.internal` launch flag (only when a new
+   `PLAYWRIGHT_RESOLVE_LOCALHOST_TO` env var is set, i.e. only inside Docker) so the browser
+   genuinely believes it's on `localhost` — matching what a real user's local browser does — while
+   its network layer still reaches the host machine. This split `UI_BASE_URL` (used by the plain
+   .NET health check, which has no such CORS constraint and does need `host.docker.internal` in
+   Docker) from a new `UI_BROWSER_URL` (always `localhost`, for the reason above) — documented in
+   both `PetClinicPageTest.cs` and the README.
+
+3. **`dotnet new sln` on the .NET 10 SDK generates a `.slnx` file, not the classic `.sln`.** The
+   Dockerfile's `COPY PetClinic.Automation.sln` failed with "not found" on the very first build
+   attempt. Caught immediately by the Docker build itself; fixed by correcting the filename.
+
+All three were caught by executing the actual pipeline (local `dotnet test`, `docker compose
+build`, `docker compose run` in all three modes, plus deliberately stopping PetClinic to test the
+failure path and restarting it to confirm recovery) rather than by inspecting the code and
+assuming it would work.
+
+**Prompt 25:**
+
+```
+Information in the console regarding the tests is too poor... What do you think will best fit for reporting the test results from the trx
+```
+
+Recommended `LiquidTestReports.Console`/`.Custom` (a `dotnet test --logger` plugin, no extra
+plumbing beyond what `--logger trx` already uses) over hand-rolling a `.trx` parser, and flagged
+that the same family has a Markdown/custom-template option if HTML was wanted later.
+
+**Prompt 26:**
+
+```
+wire it directly with the html to see how it looks
+```
+
+Added `LiquidTestReports.Custom` 1.0.9 to both test projects and wrote a self-contained HTML Liquid
+template (`src/PetClinic.Tests.Shared/Reporting/test-report.liquid`) — summary counts, per-suite
+grouping, pass/fail badges, expandable failure details with the full stack trace. Wired it into
+both the local `dotnet test` commands and the Docker entrypoint alongside the existing `.trx`
+logger. Verified by actually generating and visually inspecting the rendered HTML (via the browser
+tool, screenshotting both a passing and a deliberately-forced-failing run) rather than just
+checking the file existed, and sent the real generated report files to the user directly so they
+could open and interact with them.
+
+**What the model got wrong, caught by actually running it:**
+
+1. **`--logger "liquid.custom;Template=test-report.liquid"` with a bare relative filename failed**
+   with `Error while initializing logger: ... Value cannot be null. (Parameter 'Template')` — the
+   parameter wasn't being received as a relative path the way `--results-directory` is. Fixed by
+   passing an absolute path to the copy of the template sitting next to the built test DLL (and
+   documented this as a gotcha, since it's not obvious from the package's own README).
+2. **DotLiquid's `replace` filter treats its first argument as a regular expression, not a literal
+   string.** `{{ set.source | replace: '\', '/' | split: '/' | last }}` (meant to normalize a
+   Windows path before extracting just the DLL filename) failed at test-run time with `Invalid
+   pattern '\' at offset 1. Illegal \ at end of pattern.` — not a compile-time error, only visible
+   by actually running the logger. Fixed by regex-escaping the backslash: `replace: '\\', '/'`.
+   Confirmed the fix by re-running and visually checking the assembly name rendered as a bare
+   filename instead of the full path, in both the local Windows run and the Linux-based Docker
+   run.
+
+**Prompt 27:**
+
+```
+Can you open the html report automatically after the tests execution?
+```
+
+Recognized this only makes sense for local/host runs — a Docker container has no display to open a
+browser against, so `docker/entrypoint.sh` (used only inside the container) was left untouched.
+Added a new `PetClinic.Tests.Runner` console project: a thin local wrapper that shells out to the
+same `dotnet test` invocations already documented, then opens each resulting `.html` report via
+`Process.Start(UseShellExecute: true)` — .NET's built-in cross-platform "open with the OS default
+handler" mechanism (uses ShellExecute on Windows, `open`/`xdg-open` on macOS/Linux), so no
+per-OS script was needed, consistent with the earlier decision to keep cross-platform logic in C#
+rather than shell scripts. Supports `--no-open` and auto-skips when a `CI` env var is present.
+Updated the Dockerfile to restore/build only the two test projects directly (not the whole
+solution) so `PetClinic.Tests.Runner` — meaningless inside a headless container — never enters the
+Docker image at all.
+
+**What the model got wrong, caught by actually running it:**
+
+1. **`dotnet restore`/`dotnet build` in the Dockerfile were changed to take two project paths in
+   one invocation** (to explicitly build only the Ui and Api projects, skipping Runner) and both
+   failed immediately on the next `docker compose build` — `dotnet restore`/`dotnet build` only
+   accept a single project argument each; passing two produces an MSBuild "switch syntax" error,
+   not a merge of both. Fixed by running each command once per project instead.
+2. Did not just trust that `Process.Start(UseShellExecute: true)` opened a real browser window —
+   verified it directly by running the new tool against the live app and then querying the OS for
+   recently-started browser processes (via PowerShell `Get-Process`), confirming a new `msedge`
+   process appeared at the exact moment the test run finished, before treating the feature as
+   working.
+
+**Prompt 28:**
+
+```
+I did a research, and it turns out dotnet has its own html report generator "dotnet test --logger "html;logfilename=testResults.html" --results-directory /results"
+Can you wire this up and let me test it
+```
+
+Verified the candidate's research directly rather than taking it on faith — ran
+`dotnet test --logger "html;logfilename=testResults.html"` against the real project. Confirmed
+it works with **zero extra NuGet packages** (it's `Microsoft.VisualStudio.TestPlatform.Extensions.HtmlLogger`,
+built into the VSTest platform already referenced transitively). Visually inspected both a passing
+and a deliberately-forced-failing run: functional (shows full error/stack trace, a collapsible
+per-assembly test list), but plain — monospace, a ✓/✗ per test, no color badges, and a redundant
+"Failed Results" + "Error and Warning messages" section repeating the same text twice.
+
+Wired it in as a **second, side-by-side** HTML report rather than replacing the existing
+`LiquidTestReports.Custom` one — added a third `--logger "html;LogFileName={suite}-report-builtin.html"`
+to `docker/entrypoint.sh`, `PetClinic.Tests.Runner`, and the README's raw commands, so every run now
+produces `{suite}-report.html` (styled, custom template) and `{suite}-report-builtin.html`
+(built-in, no dependency) together. Verified both loggers coexist correctly in all three execution
+paths (local `dotnet test`, `PetClinic.Tests.Runner`, and Docker). Added a comparison table to the
+README (`## Two HTML report options`) laying out the tradeoff plainly — built-in needs zero
+dependencies and no template to maintain, custom is more readable — and said explicitly that this
+is provisional: "if one clearly isn't earning its keep, drop it," rather than presenting the
+side-by-side setup as a permanent decision. Sent the candidate the generated built-in report files
+directly so they can compare against the ones already sent for the custom template.
+
+**Prompt 29:**
+
+```
+Let us keep the VSTest's built-in. Remove all functionality related to the LiquidTestReports, leave only the VSTests's built-in
+```
+
+Removed `LiquidTestReports.Custom` entirely: `dotnet remove package` from both `PetClinic.Tests.Ui`
+and `PetClinic.Tests.Api`, deleted the `<None>` template-copy item from both `.csproj` files,
+deleted `test-report.liquid` and the now-empty `Reporting/` folder, removed the `liquid.custom`
+logger line from `docker/entrypoint.sh`, and simplified `PetClinic.Tests.Runner` (dropped the
+template-path computation entirely, renamed the produced file back to `{suite}-report.html` now
+that it's the only HTML report again). Updated the README throughout: removed the "Two HTML report
+options" comparison table and the DotLiquid `replace`-filter-is-regex known-issue note (no longer
+applicable), and reworded the stack/project-layout/reporting sections to describe a single HTML
+report again. Verified the removal was complete by grepping the whole `task2-task3-automation`
+directory (case-insensitive) for "liquid" — zero matches — and by re-running the full pipeline
+(local build, `PetClinic.Tests.Runner`, `docker compose build`, and `docker compose run` in `ui`,
+`api`, and `all` modes) against the live app to confirm nothing broke and exactly one HTML report
+per suite is produced everywhere.
+
+**Prompt 32:**
+
+```
+Can you make the powershell command open the reports after the container exits?
+```
+
+**Prompt 33:**
+
+```
+Yes
+```
+
+Provided PowerShell one-liners chaining `docker compose run --rm tests {ui|api|all}` with a
+`Start-Process` call on the resulting report(s) — checked for the file's existence first (in case
+the container fails before producing one) and opens regardless of pass/fail, so failure details
+stay visible. On confirmation, added them to `README.md`'s "Via Docker" section as a documented
+alternative for anyone who'd rather use the plain `docker compose run` commands directly than go
+through `PetClinic.Tests.Runner --docker`. Noted `Start-Process` is cross-platform in PowerShell
+7+ (not Windows-only), consistent with the project's Mac/Windows requirement.
+
+**Prompt 34:**
+
+```
+Rework Readme file, seems to detailed.
+Place prerequisites on top, mention powershell version 7+
+
+Running the tests section:
+Place the commands with automatic open of the report first. Place #comment next to each other as the original commands which runs what.
+
+Place the original commands below them.
+
+Remove any comments not related to running the project.
+
+Remove the equivalent raw commands.
+
+Remove the project layout
+```
+
+Restructured `README.md`: moved Prerequisites above Stack (top of the doc) and added a PowerShell
+7+ (`pwsh`) bullet there, since the auto-open commands depend on it. Rewrote "Running the tests"
+so the auto-open commands (`PetClinic.Tests.Runner`, locally and `--docker`, plus the PowerShell
+`docker compose run` + `Start-Process` chains) come first, each with a one-line trailing comment
+saying only what it runs — then the plain `docker compose run --rm tests {ui|api|all}` commands
+follow below as "original commands (no automatic report opening)," also commented. Deleted the
+"Equivalent raw commands" block (the raw `dotnet test --logger ...` invocations) and the entire
+"Project layout" section. Left `Configuration`, `Known issues / design notes`, `What a passing run
+looks like`, and `If PetClinic Pro isn't running` untouched — none of those were named in the
+request. Grepped the repo afterward for "Project layout" / "Equivalent raw commands" to confirm no
+other file referenced the removed sections.
