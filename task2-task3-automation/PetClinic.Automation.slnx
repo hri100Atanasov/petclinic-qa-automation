@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PetClinic.Tests.Api/PetClinic.Tests.Api.csproj" />
+    <Project Path="src/PetClinic.Tests.Runner/PetClinic.Tests.Runner.csproj" />
+    <Project Path="src/PetClinic.Tests.Shared/PetClinic.Tests.Shared.csproj" />
+    <Project Path="src/PetClinic.Tests.Ui/PetClinic.Tests.Ui.csproj" />
+  </Folder>
+</Solution>
