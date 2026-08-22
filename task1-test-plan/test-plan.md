@@ -81,7 +81,7 @@ weight in the scenario list.
 
 ## 5. Test approach
 
-- **UI-first exploration, with network inspection.** The exploratory pass that produced the risk
+- **UI-driven exploration, with network inspection.** The exploratory pass that produced the risk
   list and defects in §8 was driven through the web UI (`localhost:8081`), using the browser's
   network tab to inspect the underlying API requests and responses for each action. This is what
   made it possible to tell *which layer* a defect actually lived in — e.g. Defect #5 (pagination)
@@ -89,11 +89,11 @@ weight in the scenario list.
   checking that the underlying API response already correctly reported `"last": true`; Defect #3
   (PAID invoices with a non-zero balance) was traced past the UI to the API response itself,
   ruling out a rendering issue.
-- **Direct API testing (crafting and sending requests outside the UI) was also part of this
-  exploration**, used to precisely pin down boundary conditions (e.g. sweeping `discountPct`
-  through 0/50/100, replaying a payment with varied amounts) and confirm exact status/error codes
-  behind what the UI-first pass surfaced. This was targeted, ad hoc verification of specific
-  findings, not a systematic sweep — that's the distinction from Task 3 below.
+- **Complemented by direct API testing** (crafting and sending requests outside the UI), used to
+  precisely pin down boundary conditions (e.g. sweeping `discountPct` through 0/50/100, replaying
+  a payment with varied amounts) and confirm exact status/error codes behind what the UI pass
+  surfaced. This was targeted, ad hoc verification of specific findings, not a systematic sweep —
+  that's the distinction from Task 3 below.
 - This split still maps onto Tasks 2/3: UI automation (Task 2) exercises the same flows driven
   through the browser here; API automation (Task 3) turns the ad hoc direct API checks used in
   this pass into a systematic, automated suite covering boundary conditions comprehensively,
@@ -133,7 +133,7 @@ deliberate outcome of exploratory testing finding real issues, not a plan failur
 
 ## 8. Known defects found during exploration
 
-Surfaced through UI-first exploratory testing with network inspection (§5), with exact values and
+Surfaced through UI-driven exploratory testing with network inspection (§5), with exact values and
 boundaries in several cases additionally pinned down via direct API testing performed during this
 collaborative pass (also §5). Task 3 is where API testing becomes systematic and automated, rather
 than the ad hoc verification used here.
