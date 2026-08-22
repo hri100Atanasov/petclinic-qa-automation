@@ -14,3 +14,4 @@ task2-task3-automation/testresults/*
 Thumbs.db
 .vs/
 .idea/
+*.DotSettings.user
