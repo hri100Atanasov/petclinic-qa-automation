@@ -65,23 +65,11 @@ dotnet run --project src/PetClinic.Tests.Runner -- all --docker   # both, execut
 Under `all`, both suites always run to completion — a UI failure doesn't skip the API suite — and
 the run exits non-zero if **either** suite failed.
 
-## What a passing run looks like
+## What a run looks like
 
 ```
-=== Running UI tests (Playwright) ===
-  Passed Admin_Can_Log_In_And_Reach_The_Dashboard [1 s]
-Test Run Successful.
-Total tests: 1
-     Passed: 1
-
-=== Running API tests (RestSharp) ===
-  Passed Admin_Can_Log_In_And_Receive_A_Bearer_Token [203 ms]
-Test Run Successful.
-Total tests: 1
-     Passed: 1
-
 === Summary ===
-UI suite:  PASSED
+UI suite:  FAILED (6 passed, 3 failed)
 API suite: PASSED
 TRX + HTML reports written to ./testresults
 ```
@@ -91,6 +79,24 @@ Every run writes, per suite, to `./testresults/`:
 - `{ui,api}-report.html` — a self-contained HTML report (pass/fail counts, per-test list with
   duration, full error/stack trace on failure) via VSTest's built-in `html` logger. Opens directly
   in a browser — no server needed.
+
+### The UI suite is expected to fail right now — that's by design
+
+Three UI tests deliberately reproduce known, confirmed defects from Task 1
+(`../task1-test-plan/test-plan.md` §8) and are written to assert the *correct* behavior, not the
+app's current behavior — so they fail until the underlying bug is fixed, and start passing (with
+no test changes needed) the moment it is:
+
+| Test | Defect | Asserts |
+|---|---|---|
+| `Defect1TaxCalculationTests` | #1 — tax computed on subtotal, not taxable amount | A 100%-discounted invoice's tax should be $0 |
+| `Defect4DisabledAccountTests` | #4 — a disabled account can still authenticate | `former.staff` (disabled) should be rejected at login |
+| `Defect5PaginationTests` | #5 — pagination `Next` stays active past the last page | `Next` should be disabled on the true last page |
+
+The other 6 tests (login, the full invoice lifecycle, and 4 RBAC checks) pass and are expected to
+keep passing. This mirrors Task 1's own exit criteria: the module doesn't exit "green," it exits
+with a known, documented, regression-testable defect list — the same philosophy applied to
+automation instead of manual scenarios.
 
 ## If PetClinic Pro isn't running
 
@@ -111,8 +117,10 @@ reachable, you get one clear message instead of a wall of connection-refused fai
 ============================================================
 ```
 
-The UI suite checks only the UI's reachability; the API suite checks only the API's
-`/actuator/health` endpoint — each suite gates on what's relevant to it, not on the other surface.
+The API suite checks only the API's `/actuator/health` endpoint. The UI suite checks *both* the UI
+and the API — several UI tests (RBAC, Defect #1) seed their fixtures with direct API calls (see
+`InvoiceTestData`), so a UI-only check would pass while the API is down and those tests would then
+fail on a raw connection error instead of this message.
 
 ## Stack
 
@@ -124,6 +132,30 @@ The UI suite checks only the UI's reachability; the API suite checks only the AP
   pre-installed matching Playwright 1.62.0 exactly)
 - **Reporting:** console output, `.trx`, and an HTML report per suite via VSTest's built-in `html`
   logger — no extra NuGet package needed
+
+## UI test coverage (Task 2)
+
+Page Object Model (`src/PetClinic.Tests.Ui/Pages/`) — `LoginPage`, `InvoiceListPage`,
+`InvoiceDetailPage` — one class per distinct page/URL the app has. Assertions live in the tests,
+not the page objects. Fixtures for tests that don't create their own invoice through the UI are
+seeded directly via the API (`Fixtures/InvoiceTestData.cs`) — that's test *setup*, not what's under
+test, so it isn't bound by Task 1's UI-only exploratory methodology.
+
+Scoped to the Billing module, anchored on Task 1's own risk findings rather than broad coverage:
+
+- **Login + S1 (full lifecycle)** — the positive baseline; proves the UI's rendering pipeline
+  surfaces correct computed values through real forms, not just that the API returns them.
+- **Defects #1, #4, #5** — the three confirmed Task 1 defects that are UI-observable or
+  UI-exclusive (§5's Next button bug can't be caught any other way). See "The UI suite is expected
+  to fail right now" above.
+- **RBAC at the UI layer** — new ground Task 1 didn't cover. Task 1 confirmed the *API* rejects
+  unauthorized writes (test-plan.md §9, S10-S13); these tests check whether the *UI* actually hides
+  those controls for READONLY/VET, or renders one that would then fail — a distinct
+  authorization-awareness risk from what's already proven at the API layer.
+
+Left out deliberately: S2/S3 (multi-item totals, partial payments) — solid positive coverage, but
+at the UI layer they mostly re-prove "the screen displays what the API already computed," which is
+better-owned by Task 3 where more input combinations are cheap to test directly against the API.
 
 ## Configuration (environment variables)
 
@@ -163,6 +195,17 @@ automatically.
   (`dotnet build a.csproj b.csproj`) fails with an MSBuild "switch syntax" error. The Dockerfile
   runs them once per project instead of trying to pass both at once. Only matters if you're
   editing the Dockerfile.
-- **Scope right now:** one smoke test per suite (login), proving the whole pipeline — Docker
-  build, cross-platform networking, readiness gating, both runners, HTML/`.trx` reporting — works
-  end-to-end. The real Task 2/3 scenario suites come next, on top of this foundation.
+- **The app's own state updates can lag its click handlers.** Clicking `Next` (or submitting a
+  form) and immediately reading the DOM can observe stale state — e.g. clicking `Next` 14 times in
+  a tight loop was observed to leave the page stuck on page 1. `LoginPage.LoginAsync` and
+  `InvoiceListPage`'s `ClickNextAsync`/`CreateDraftInvoiceAsync` all wait for their action's actual
+  effect (network idle, or the specific value that should have changed) before returning, rather
+  than trusting that a click resolving means the app has caught up.
+- **New finding, not yet automated:** `reception`'s API token can successfully void an invoice
+  (`POST /api/invoices/{id}/void` returns 200, confirmed during Task 1), but the UI never shows a
+  Void button to RECEPTIONIST — only ADMIN gets one. The UI's restriction is real but the API
+  doesn't enforce it; worth a dedicated API test in Task 3 rather than assuming the UI gap is the
+  whole story.
+- **Scope right now:** login, the full invoice lifecycle (S1), the three UI-observable Task 1
+  defects (#1, #4, #5), and UI-layer RBAC across all four roles — see "UI test coverage" above for
+  what's covered and why. Task 3 (API automation) comes next.
