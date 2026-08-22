@@ -738,3 +738,158 @@ follow below as "original commands (no automatic report opening)," also commente
 looks like`, and `If PetClinic Pro isn't running` untouched — none of those were named in the
 request. Grepped the repo afterward for "Project layout" / "Equivalent raw commands" to confirm no
 other file referenced the removed sections.
+
+**Prompt 35:**
+
+```
+The setup looks good, push to repo with sensible commits
+```
+
+Committed the whole `task2-task3-automation` project in 8 logically-scoped commits rather than one
+large one: `.gitignore`, the solution scaffold + shared config/health-check, the UI smoke test, the
+API smoke test, the local runner, the Docker setup, the README, and this file. While staging the
+Docker-setup commit, caught a real cross-platform bug before it shipped: `core.autocrlf=true` was
+set locally, which would silently convert `entrypoint.sh` to CRLF line endings on a future
+checkout — and since that script gets `COPY`'d into the Linux container and executed there, a CRLF
+shebang line would break it at container runtime. Added `.gitattributes` forcing `*.sh` to stay LF
+regardless of the checkout machine's `autocrlf` setting, verified the staged blob was LF-only, then
+committed and pushed all 8 commits to `origin/main`.
+
+**Prompt 36:**
+
+```
+Let us now focus on the implementation of the tests for Task 2 UI automation.
+
+Scenarios to cover:
+
+login already there, but make it work with page object model
+
+S1 - invoice full lifecycle create->issue->pay
+
+defect 1 - verify tax calculated on taxable amount instead of subtotal
+
+defect 4 - verify that a disabled account can not login
+
+defect 5 - verify pagination Next button does not continue after last page
+
+RBAC tests verify that:
+auditor and vets has only read only access, no buttons for invoice manipulations
+receptionist can create invoices, add items to invoices, issue invoice, record payments on invoice
+admin has receptionist + void an invoice
+
+Use Page Object Model. Assertions stay in the tests, not the page objects. Use data-testid
+attributes for selectors.
+```
+
+Before writing any code, explored the running app directly (browser tool + raw JS execution against
+`document`) to find the real selectors (`data-testid` attributes throughout — nav, login, invoice
+list, invoice detail, both modals) and confirm exact behavior, rather than guessing:
+- Logged in as `former.staff` through the actual login form and confirmed the frontend does not
+  block the disabled account — it lands on the Dashboard, same as the API-level finding from Task 1,
+  now confirmed at the UI layer too.
+- Reproduced Defect #5 more precisely than previously known: clicking Next repeatedly past the true
+  last page doesn't just leave it enabled — the app has no upper bound check at all. Verified 20
+  scripted clicks past the end all succeeded, landing on "Page 21 of 15" with "No invoices found,"
+  before designing a clean, non-hardcoded assertion (parse "Page X of Y", click to X == Y, check
+  `Next` there specifically).
+- Discovered the exact button set the app renders per role by logging in as `reception` and `admin`
+  in turn: RECEPTIONIST sees "Record payment" but no Void button on an issued invoice; ADMIN sees
+  both. This confirmed the candidate's RBAC spec exactly, including a detail neither of us had
+  stated explicitly (Void is admin-only in the UI) — and surfaced a new mismatch worth flagging: a
+  `reception` API token can actually void an invoice successfully (confirmed in Task 1), even though
+  the UI never offers that action to RECEPTIONIST. Documented as a new, not-yet-automated finding in
+  the README rather than silently ignored.
+
+Implemented: `LoginPage`, `InvoiceListPage`, `InvoiceDetailPage` (Page Object Model, `Pages/`),
+`InvoiceTestData` (API-based fixture setup for tests that don't create their own invoice through
+the UI — test infrastructure, not bound by Task 1's UI-only exploratory methodology), and six test
+files: `LoginTests` (refactored to POM), `InvoiceLifecycleTests` (S1), `Defect1TaxCalculationTests`,
+`Defect4DisabledAccountTests`, `Defect5PaginationTests`, `RbacTests` (4 cases: auditor, vet, 
+receptionist, admin).
+
+**What the model got wrong, caught by actually running each test against the live app:**
+
+1. **A login race.** `InvoiceLifecycleTests` timed out waiting for `invoice-create-button` — the
+   test navigated to `/invoices` immediately after clicking "Sign in," racing the login POST and
+   any resulting redirect. Fixed at the root: `LoginPage.LoginAsync` now waits for network idle
+   before returning (a neutral wait, not an assertion — whether login *succeeded* is still left for
+   the caller to check), and the success-path tests also explicitly assert `SignOutButton` is
+   visible before proceeding, which doubles as a clear precondition check.
+2. **A stale-DOM race in invoice creation.** After fixing (1), S1 failed differently: it created a
+   draft, then landed on an already-ISSUED invoice instead — reading the topmost list row
+   immediately after the modal closed sometimes returned the *previous* top invoice, before the
+   list had refetched. Fixed by capturing the top invoice id before creating, then polling
+   (up to 3s) until it actually changes, rather than trusting a single read right after the modal
+   closes.
+3. **The pagination test initially failed for the wrong reason twice.** First attempt: clicking
+   `Next` 14 times in a tight loop with no wait between clicks left the test stuck on page 1 (the
+   app's own page-state update lagging the click handler) — caught by the assertion "should have
+   landed exactly on the last page" failing with `current: 1` instead of the expected total. Fixed
+   `ClickNextAsync` to wait for the page indicator's number to actually change after each click.
+   Second attempt: this fix alone passed in isolation but flaked once under the full 9-test suite's
+   sustained load (3s retry budget too tight) — caught by re-running the full suite three times in a
+   row rather than treating one green run as sufficient, doubled the retry budget to 6s, then
+   re-verified stable across three more consecutive full-suite runs, plus once more inside Docker.
+
+Final state: 9 UI tests, 6 pass, 3 fail by design (the three defect-reproduction tests, which assert
+correct behavior and will pass once each underlying bug is fixed) — stable across five consecutive
+full-suite runs (three local, two Docker) before being reported as done. Updated `README.md`: a new
+"UI test coverage" section justifying what's covered and why (mirroring the "why did you test what
+you tested" framing the assignment cares about), an explicit "expected to fail right now" callout so
+the three red tests don't read as a broken pipeline, and the two race-condition lessons captured
+under Known issues.
+
+**Prompt 37:**
+
+```
+I explored the tests and their setup and:
+
+The RBAC UI tests execute http requests against the API for issuing an invoice. Add the API check to the UI suite setup too. Also update the readme "The UI suite checks only the UI's reachabi..." Also check any relevant comments or other places this might need fixing.
+
+This test - "Receptionist_Can_Create_Issue_And_Pay_An_Invoice" seems to obtain the wrong invoice an invoice with amount of 200 instead of 100, thus it some times passes some times fails. The way it obtains the invoice is the problem, it ends up with invoice other than the one the test creates. Can you obtain the invoice ID from the network response and use it as a selector. The other tests use the api for invoice creation they should be fine.
+```
+
+Two independent fixes, both from the candidate's own investigation of the test setup rather than
+something surfaced by running the suite here:
+
+1. **UI suite's readiness gate now also checks the API**, not just the UI. `PetClinic.Tests.Ui`'s
+   `AssemblySetup.EnsureAppIsRunning` was UI-only by original design (§ "Only what's relevant" from
+   the initial architecture discussion) — but that design predates `InvoiceTestData`, which several
+   UI tests (RBAC, Defect #1) now use to seed fixtures via direct API calls. A UI-only check would
+   pass while the API is down and those tests would then fail on a raw connection error instead of
+   the friendly message. Grepped the whole `task2-task3-automation` tree for every place that
+   claimed the UI-only scoping (`AssemblySetup.cs`'s doc comment, `README.md`'s "If PetClinic Pro
+   isn't running" section) and updated both, rather than fixing just the code and leaving the docs
+   stale. Verified by pointing `API_BASE_URL` at a dead port and confirming even `LoginTests` (which
+   never touches the API itself) now fails at the fatal setup stage with the correct message.
+2. **`InvoiceListPage.CreateDraftInvoiceAsync` now reads the created invoice's id from the
+   `POST /api/invoices` response body** (`Page.RunAndWaitForResponseAsync`), replacing the previous
+   DOM-scraping approach (read the list's top row, poll until it changes from what it was before
+   creating). That polling fix — added earlier in this session specifically to address a stale-DOM
+   race — turned out to still be an unreliable heuristic under the fuller test suite: "the top row
+   changed" doesn't guarantee it changed *to the invoice this test created*, only to *some* new
+   invoice. The candidate's own exploration caught this precisely (S1 intermittently landing on a
+   $200 invoice instead of the $100 one it created). The network-response approach removes the
+   ambiguity entirely rather than tightening the heuristic further. Verified by running S1 five
+   times in a row locally (previously flaky, now 5/5 pass, consistently ~3s each) and once in
+   Docker, then re-ran the full 9-test suite twice locally to confirm the other tests' pass/fail
+   split held steady.
+
+**Prompt 38:**
+
+```
+reframe the test plan from ui-first to something like ui-driven exploration, also find any related places that refer to UI-first and change them as well
+```
+
+Reframed `test-plan.md` §5: now that direct API testing is an accepted, integrated part of the
+overall approach — not a constraint the project's later work has to justify itself against — the
+section's opening framing ("UI-first exploration" as the headline method, direct API testing
+folded in as "also part of" it) was judged to overstate a priority between the two that no longer
+reflects how the work actually developed. Reworded the opening bullet to "UI-driven exploration, with network
+inspection" and the direct-API bullet to "Complemented by direct API testing," removing the
+first/also framing while keeping the underlying content unchanged. Grepped the whole repo
+(case-sensitive, "UI-first") for every other occurrence rather than trusting memory of where it
+appeared: found and fixed two more in `test-plan.md` (§5's own "behind what the UI-first pass
+surfaced" and §8's opening sentence), left every occurrence in this file alone (a chronological log
+of prompts as they were given, not something to retroactively rewrite when a later decision changes
+framing), and confirmed zero occurrences anywhere under `task2-task3-automation/`.
