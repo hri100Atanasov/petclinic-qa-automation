@@ -12,8 +12,9 @@ run_ui() {
         --no-build -c Release \
         --logger "trx;LogFileName=ui-results.trx" \
         --logger "html;LogFileName=ui-report.html" \
-        --logger "console;verbosity=normal" \
-        --results-directory "$RESULTS_DIR"
+        --logger "console;verbosity=quiet" \
+        --results-directory "$RESULTS_DIR" \
+        -tl:off
 }
 
 run_api() {
@@ -23,8 +24,9 @@ run_api() {
         --no-build -c Release \
         --logger "trx;LogFileName=api-results.trx" \
         --logger "html;LogFileName=api-report.html" \
-        --logger "console;verbosity=normal" \
-        --results-directory "$RESULTS_DIR"
+        --logger "console;verbosity=quiet" \
+        --results-directory "$RESULTS_DIR" \
+        -tl:off
 }
 
 ui_status=0

@@ -92,8 +92,11 @@ ProcessStartInfo DotnetTestFor(string suite)
     psi.ArgumentList.Add($"trx;LogFileName={suite}-results.trx");
     psi.ArgumentList.Add("--logger");
     psi.ArgumentList.Add($"html;LogFileName={suite}-report.html");
+    psi.ArgumentList.Add("--logger");
+    psi.ArgumentList.Add("console;verbosity=quiet");
     psi.ArgumentList.Add("--results-directory");
     psi.ArgumentList.Add(resultsDir);
+    psi.ArgumentList.Add("-tl:off");
     return psi;
 }
 
