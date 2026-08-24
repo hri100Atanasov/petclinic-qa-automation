@@ -1452,3 +1452,48 @@ together (from Prompt 52's finding) — dropping either brings stack traces back
 conditions but not others, which isn't obvious from reading either flag in isolation.
 
 Not committed — per established policy, only committing when explicitly asked.
+
+**Prompt 54:**
+
+```
+Focus Task 5 and create a top level README
+```
+
+Re-read `qa-candidate-task.md` §Task 5 and §Submission directly rather than working from memory of
+the brief, since this file hadn't been reopened since the very first prompt of this whole
+engagement. Task 5's bullet list (prerequisites with versions; how to point suites at the app and
+what to change if it's elsewhere; how test data behaves between runs and how to reset it; exact
+commands and what a passing run looks like; known issues/flaky tests/deliberate gaps) plus
+Submission's separate requirement ("a top-level README stating which tasks you attempted and any
+assumptions you made") both map onto one file, since no top-level README existed yet — confirmed via
+`ls` before writing anything.
+
+Read `qa-test-automation-task/README.md` (the AUT's own setup doc, a sibling repo) directly rather
+than reconstructing its commands from memory, to get its exact image-loading steps and the
+`docker compose down -v` reset command right. Designed the new file to be self-sufficient end to end
+(per the acceptance criterion: "we should be able to get your suites running from your instructions
+alone") while linking out to `task2-task3-automation/README.md` for depth already covered there,
+rather than duplicating its Prerequisites/Configuration/Known-issues sections wholesale.
+
+While verifying the exact pass/fail counts to state as "what a run looks like" (rather than trusting
+memory of the 10/4 baseline from several prompts ago), reran both suites and got a different result
+than expected: the API suite showed 5 failures, not 4 — `Every_Paid_Invoice_Has_A_Zero_Balance` had
+flipped from passing back to failing. Investigated rather than picking either number: queried the
+live app directly and found `INV-2024-0003`/`0004` (the original two seed invoices Task 1's defect
+#3 was based on) back in the database, with owner count down to 27 from the 300+ this session's
+accumulated test runs had built up -- meaning the AUT's Docker volume had been reset at some point
+outside this session's control, restoring the original seed data. This test's pass/fail status turns
+out to depend on whether those two specific invoices currently exist, not on anything this test
+suite controls -- unlike every other failing test, which is self-contained and deterministic
+regardless of database state. Wrote the top-level README to say "9 or 10 passed, 5 or 4 failed"
+with the reason, rather than commit to a single number that would go stale the next time the AUT's
+data got reset. Also went back and fixed the same overclaim in `task2-task3-automation/README.md`
+(written two prompts ago as a fixed "10 passed, 4 failed") for consistency, rather than leave one
+doc accurate and the other wrong.
+
+Verified every file path and relative link the new README references actually resolves (`ls` per
+path, plus confirming the assumed `qa-test-automation-task` sibling-directory layout is real on
+disk) before finalizing, and cross-checked `.env.example`'s actual contents against what the README
+describes rather than restating it from memory.
+
+Not committed — per established policy, only committing when explicitly asked.
