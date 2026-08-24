@@ -893,3 +893,323 @@ appeared: found and fixed two more in `test-plan.md` (§5's own "behind what the
 surfaced" and §8's opening sentence), left every occurrence in this file alone (a chronological log
 of prompts as they were given, not something to retroactively rewrite when a later decision changes
 framing), and confirmed zero occurrences anywhere under `task2-task3-automation/`.
+
+**Prompt 39:**
+
+```
+Looking again at the risks from the test plan, I think it is worth writing a test for defect2 the overpayment of an invoice. Write a UI test for it, stick to the naming convention defect2Overpaiment, use the receptionist login. The test should be a failing one.
+```
+
+Added `Defect2OverpaymentTests.cs` (`Defect2OverpaymentTests` / `Overpaying_An_Invoice_Does_Not_Leave_A_Negative_Balance`), matching the existing `Defect{N}{ShortName}Tests` naming pattern — used the correctly-spelled "Overpayment" rather than the prompt's literal "Overpaiment", reading the instruction as "follow the naming convention" rather than "commit that specific spelling." Seeds an issued invoice via `InvoiceTestData` (balance 110.00), logs in as `reception`, attempts a 500.00 payment through the UI, then asserts the balance is never negative — the one invariant common to both acceptable fixes documented in `scenarios-full.md` S8 (reject outright, or accept and record the excess as a credit while marking the invoice Paid), rather than presupposing one specific design.
+
+Found PetClinic itself wasn't running when first attempting to verify — started it (`docker compose up -d` in `qa-test-automation-task/`) before running anything. Ran the test against the live app: failed exactly as expected, parsed balance `$-390` (500 − 110), confirming Defect #2 reproduces at the UI layer. Re-ran once more for confidence, then ran the full UI suite (now 10 tests) and confirmed the same 6-pass split holds with 4 (not 3) tests now failing by design. Updated `README.md`'s defect table, "UI test coverage" section, and "Scope right now" bullet to include Defect #2 alongside #1/#4/#5.
+
+**Prompt 40:**
+
+```
+I think the RBAC UI tests should be included in the test plan . What do you think about adding s16 something like RBAC UI billing controls match each role's permission level - readonly/vet hidden, receptionist - full access minus void and admin - full access including void. Rephrase/improve, don't make it too long it should be a "one liner".
+```
+
+Added **S16** to `test-plan.md` §9's scenario list, immediately after S15: "Billing controls in the
+UI match each role's permission level. READONLY/VET see no write controls, RECEPTIONIST gets full
+access minus void, ADMIN gets full access including void; UI-level, to be confirmed in Task 2." —
+rephrased from the prompt's draft into the same one-liner style as the other scenario bullets,
+matching S14's "UI-level, to be confirmed in Task 2" phrasing since it's the same kind of
+Task-2-only check (already implemented as `RbacTests.cs`). Left it out of the "written up in full"
+list alongside S1/S2/S3/S6/S8/S9/S15, since it already exists as working code in Task 2 rather than
+needing a full scenario spec in `scenarios-full.md`.
+
+**Prompt 41:**
+
+```
+Change the wording for defect 4 in the known defects section remove this part "(READONLY blocked from write actions, VET blocked from void)" it does not describe vet correctly
+```
+
+Removed the parenthetical from defect #4's description in `test-plan.md` §8. The candidate flagged
+it as inaccurate for VET specifically — the RBAC UI tests (`RbacTests.cs`) treat VET as read-only
+for billing, same as READONLY, not as a role that has write access except void; the removed text's
+claim that VET is "blocked from void" (implying it can otherwise write) didn't match that. Made no
+independent attempt to verify or re-derive the correct VET permission boundary — deferred entirely
+to the candidate's correction and removed the disputed clause rather than replacing it with a new
+claim.
+
+**Prompt 42:**
+
+```
+let's focus on the implementation of the API tests - Task 3 for the billing module. Below is what I think should be included in the tests. Feel free to suggest any improvement, inconcistencies, etc.
+
+1. RBAC — Readonly/VET no writes allowed, Receptionist - full access minus void, Admin full
+   access including void. Must include a dedicated Receptionist_Cannot_Void_Via_Api test — this is expected to FAIL today (reception's token can void via the API even though the UI hides the button, per README's "new finding").
+
+2. Defect #4 — disabled account. Assert login is rejected for former.staff (currently succeeds —
+   defect). Use the enabled:false field as supporting evidence.
+
+3. Defect #5 — pagination. Assert GET /api/invoices?page=N&size=... returns "last": true on the
+   true last page.
+
+4. Defect #1 — tax computed on subtotal instead of taxable (post-discount) amount.
+5. Defect #2 — overpayment, implement a 3 value boundary value testing to 2 decimal places.
+6. Full invoice lifecycle — assert subtotal, discount amount, taxable amount, tax amount, total,
+
+   amount paid, balance individually and combined (discount + tax together), using a multi-item
+   invoice so this also closes S2 (multi-item subtotal). Including a nonzero discount here
+   means the tax assertion will fail today due to Defect #1.
+
+7. Defect #3 / S15 — PAID status implies zero balance. System-wide sweep over all PAID invoices
+
+   via GET + filter, not specific invoice numbers. Earmarked for Task 3 since Task 2's README
+   scoped it out as API-only territory.
+```
+
+Before writing any test code, re-verified every endpoint shape and status code directly against the
+running app (`docker ps` showed the API container healthy already) via raw `curl`, rather than
+trusting the UI-layer field names/assumptions carried over from Task 2 — request/response bodies
+for login, create/add-item/issue/pay/void, list+pagination, and the `status` filter query param were
+all confirmed this way before any test was written.
+
+That verification surfaced a real discrepancy with the plan: item 1 assumed
+`Receptionist_Cannot_Void_Via_Api` would **fail** today, per the README's "new finding" that
+reception's token could void an invoice (200, confirmed during Task 1). Re-tested it directly —
+twice, on both a DRAFT and a freshly-issued invoice, with an admin void as a positive control (200,
+succeeded normally) — and got a consistent `403 Forbidden` for reception in both cases. The
+documented Task 1/README finding does not reproduce on the currently running app. Rather than
+building a test around a claim that no longer holds, reclassified this as a regression guard
+(expected to **pass**, confirming the API correctly rejects it) and will correct the
+`task2-task3-automation/README.md` "Known issues" section that documented the 200 finding, flagging
+the correction transparently rather than quietly dropping it.
+
+Also reclassified item 3 (Defect #5 at the API layer) the same way going in: Task 1 already
+established the API's `last` flag is correct and the bug is UI-only, so this is a regression
+guard/contract check, not a defect reproduction — it's expected to pass, and won't be counted in the
+"expected to fail" total.
+
+Confirmed live before writing the lifecycle test (item 6): the API's `total` field is computed as
+`taxableAmount + taxAmount`, so Defect #1 (tax on subtotal, not taxable amount) cascades into `total`
+and, if the invoice is paid using the mathematically-correct total rather than the API's own
+(inflated) figure, into `balance` and `status` too. Decided to pay the correct expected total in this
+test rather than whatever the API reports, specifically so the lifecycle test shows the real
+downstream consequence of Defect #1 (the invoice can't actually reach a clean paid state under
+correct accounting) rather than just re-checking the same isolated field the dedicated Defect #1 test
+already covers.
+
+Also confirmed live: an exact payment (2.00 against a 2.00 balance) transitions status to `PAID`
+with balance `0.00`; an underpayment (1.99) transitions to `PARTIALLY_PAID` with balance `0.01`
+without incorrectly marking it `PAID` — both used as the expected values for the two passing cases
+in the Defect #2 boundary-value test.
+
+Proceeding to implement all seven groups now, with a shared `PetClinicApiClient` (RestSharp) and
+response model classes in `PetClinic.Tests.Api/Support/`.
+
+Built `Support/PetClinicApiClient.cs` (login/create/add-item/issue/pay/void/get/list, all
+authenticated via a bearer token set on the instance) and `Support/Models.cs`, refactoring
+`LoginTests.cs` to reuse both rather than keep its own duplicate private model classes. Added all
+seven test files: `RbacTests.cs`, `Defect4DisabledAccountTests.cs`, `Defect5PaginationTests.cs`,
+`Defect1TaxCalculationTests.cs`, `Defect2OverpaymentTests.cs`, `InvoiceLifecycleTests.cs`,
+`Defect3PaidBalanceIntegrityTests.cs`.
+
+Design decisions made while writing them, verified against the live app in each case:
+- **Defect #2 boundary values** use a clean 2.00 invoice (0% tax, 0% discount) so the boundary isn't
+  contaminated by Defect #1. Confirmed live: an exact 2.00 payment reaches PAID/balance 0.00; a 1.99
+  underpayment reaches PARTIALLY_PAID/balance 0.01 without incorrectly flipping to PAID — both used
+  as the expected values for the two passing cases, with 2.01 as the separate failing case.
+- **Defect #1** uses a 20% discount, not 100% — a 100% discount collapses both the taxable amount
+  and the subtotal-based calculation to the same result and would mask the bug.
+- **The lifecycle test** pays the mathematically-correct total (93.50) rather than whatever the
+  API's own (Defect #1-inflated) total field reports (95.00), specifically so the test demonstrates
+  the bug's real downstream consequence — the invoice can't reach a clean paid state under correct
+  accounting — rather than re-checking the same isolated field the dedicated Defect #1 test already
+  covers. Documented in the test's own comment that the resulting `taxAmount`/`total`/`balance`/
+  `status` failures share one root cause, not four independent defects.
+- **Defect #3 / S15** sweeps every invoice via `?status=PAID&size=500` and asserts balance 0.00
+  across all of them at once (collecting every violation into the failure message, not failing fast
+  on the first), rather than checking specific invoice numbers — confirmed the seed data's two known
+  offenders (`INV-2024-0003`, `INV-2024-0004`) are exactly what it catches.
+
+Hit one real bug while first running the lifecycle test: `Assert.Multiple` throws once its block
+ends if anything inside failed, which meant the test's second block (issue + pay + balance/status
+assertions) never ran at all — it was silently skipped, not passed. Restructured so all API calls
+(create, add items, issue, pay) run unconditionally before any assertions, with every field checked
+in one `Assert.Multiple` block at the end. Confirmed the fix by rerunning: the cascading
+`taxAmount`/`total`/`balance`/`status` failures now all show up as designed, five failures instead
+of three.
+
+Ran the full suite directly (`dotnet test`) three times for stability, then rebuilt and ran it
+through Docker (`docker compose run --rm tests api`, then `... tests all` alongside the UI suite) to
+confirm the containerized path works end to end. Consistent result every time: **14 tests, 9 passed,
+5 failed** — the 5 failures are exactly `Defect1TaxCalculationTests`, `Defect2OverpaymentTests`
+(the 2.01 case only), `Defect3PaidBalanceIntegrityTests`, `Defect4DisabledAccountTests`, and
+`InvoiceLifecycleTests` (the Defect #1 cascade); `Defect5PaginationTests` and
+`RbacTests.Receptionist_Cannot_Void_Via_Api` pass as their now-corrected regression-guard framing
+predicted. The UI suite's own 10 tests (6 pass/4 fail) were unaffected — confirmed via the combined
+`tests all` Docker run.
+
+Updated `README.md`: the "What a run looks like" example now shows the real API suite numbers;
+added a full "The API suite is also expected to fail right now" section (mirroring the UI one, with
+its own table and an explicit note that the lifecycle test's failures are a Defect #1 cascade, not a
+6th defect); added a full "API test coverage (Task 3)" section (mirroring "UI test coverage"); and
+replaced the old "New finding, not yet automated" bullet under Known issues with a "Correction to a
+Task 1 finding, caught while building Task 3" bullet documenting the reception-void discrepancy
+transparently rather than silently rewriting the earlier claim. Updated the "Scope right now" bullet
+to reflect Task 3 being done.
+
+Not committed — per established policy, only committing when explicitly asked.
+
+**Prompt 43:**
+
+```
+There is duplication of code between the API and UI projects. Since we already have a shared directory, can you place the common logic, creation of invoice, login, models, etc. there
+```
+
+Moved `PetClinicApiClient` (login/create/add-item/issue/pay/void/get/list) and all response models
+from `PetClinic.Tests.Api/Support/` into `PetClinic.Tests.Shared/Api/` (namespace
+`PetClinic.Tests.Shared.Api`), and added a `RestSharp` package reference to
+`PetClinic.Tests.Shared.csproj` so both projects can use it. Added a new
+`CreateDraftInvoiceWithItemAsync` convenience method to the shared client (draft + one line item,
+no issue) alongside the existing `CreateIssuedInvoiceAsync`, matching the two method names the UI
+project's now-deleted `InvoiceTestData.cs` exposed, so no UI test call sites needed to change beyond
+the receiver's name and namespace.
+
+Deleted `PetClinic.Tests.Api/Support/` entirely and repointed all 8 API test files at
+`PetClinic.Tests.Shared.Api`; removed the now-redundant direct `RestSharp` package reference from
+`PetClinic.Tests.Api.csproj` (it's available transitively via the project reference to
+`PetClinic.Tests.Shared`). Simplified `RbacTests.cs`'s (API) fixture setup to call the new
+`CreateDraftInvoiceWithItemAsync` instead of the three inline calls it used before.
+
+Deleted `PetClinic.Tests.Ui/Fixtures/InvoiceTestData.cs` (the HttpClient-based duplicate) entirely
+and repointed its three callers (`RbacTests.cs`, `Defect1TaxCalculationTests.cs`,
+`Defect2OverpaymentTests.cs`) at the shared `PetClinicApiClient` directly. One real behavioral
+difference had to be handled: `InvoiceTestData` lazily authenticated as admin on first use;
+`PetClinicApiClient` requires an explicit `AuthenticateAsync` call, so each call site gained one
+(`RbacTests.cs`'s `[SetUp]` became `async Task` to do it once per test; the other two do it inline
+where the client is constructed, since they only use it in a single test method each). Updated
+`AssemblySetup.cs`'s doc comment, which referenced the now-deleted `InvoiceTestData` by name, to
+point at the shared client instead, and added Defect #2 to the list of UI tests that seed via direct
+API calls (it did already, the comment just hadn't been updated when that test was added in Prompt
+39).
+
+Verified no regression: rebuilt both projects (`dotnet build`, zero warnings/errors each), then ran
+both suites — locally and once more through Docker (`docker compose build tests` then
+`docker compose run --rm tests all`) — and confirmed byte-identical results to before the refactor:
+API suite 14 tests/9 passed/5 failed (same five), UI suite 10 tests/6 passed/4 failed (same four).
+
+Updated `README.md` in three places that named the old `Support/PetClinicApiClient.cs` and
+`Fixtures/InvoiceTestData.cs` paths directly, to instead point at `PetClinic.Tests.Shared/Api/` and
+explain why both projects now share one client instead of each having its own.
+
+Not committed — per established policy, only committing when explicitly asked.
+
+**Prompt 44:**
+
+```
+Can you rework SeedAccounts to use static classes with const fields instead of using tuples and use them in the TestCase attributes in the RBAC tests
+```
+
+Reworked `SeedAccounts.cs` from four `(string Username, string Password)` tuple fields to four nested
+static classes (`Reception`, `Vet`, `Auditor`, `FormerStaff`), each with `const string Username`/
+`Password` — tuples can't be used as `[TestCase]` arguments (NUnit attribute arguments must be
+compile-time constants), which is exactly why the RBAC tests were still using raw literal strings
+instead of referencing `SeedAccounts` at all. Updated both `RbacTests.cs` files (API and UI) to use
+`SeedAccounts.Auditor.Username`/`.Password` and `SeedAccounts.Vet.Username`/`.Password` in their
+`[TestCase]` attributes instead of `"auditor"`/`"audit123"` etc.
+
+Grepped for every `SeedAccounts` usage across both projects first, since `.Username`/`.Password`
+property-style access reads identically whether the underlying member is a tuple field or a nested
+class's const — those call sites needed no changes. Found one that did: `Defect4DisabledAccountTests.cs`
+(UI) used tuple deconstruction (`var (username, password) = SeedAccounts.FormerStaff;`), which
+doesn't compile against a static class — replaced with direct `SeedAccounts.FormerStaff.Username`/
+`.Password` references at the two call sites.
+
+Verified: both projects build with zero warnings/errors, and the UI suite reproduces its usual 10
+tests/6 passed/4 failed exactly. The API suite came back **10 passed/4 failed** instead of the
+expected 9/5 — investigated before reporting anything, since a result change during an unrelated
+refactor needs explaining, not shrugging off. Root cause has nothing to do with this change:
+`Every_Paid_Invoice_Has_A_Zero_Balance` now passes because the app's database has been reset
+entirely outside this session — `docker ps` shows the containers with a shorter uptime than earlier
+in this session, `GET /api/invoices` now reports 16 total invoices (was 136+), and invoices `#3`/`#4`
+(the ones Defect #3's sweep was catching) return 404 — they no longer exist. This is an environment
+change, not a code regression; did not touch `Defect3PaidBalanceIntegrityTests.cs` or the README's
+defect tables over it, since the test's design (a system-wide sweep, not specific invoice numbers)
+is still correct and whether it currently finds a violation depends on data state outside this
+session's control. Flagged directly to the user rather than silently absorbed into this prompt's
+summary.
+
+Not committed — per established policy, only committing when explicitly asked.
+
+**Prompt 45:**
+
+```
+I don't see any reason for keeping the AdminUsername and AdminPassword in the environment variables. Add them to the SeedAccounts as well and remove them from the env variables.
+```
+
+Added `SeedAccounts.Admin` (const `Username`/`Password`, same as the other four seed accounts) and
+removed `AdminUsername`/`AdminPassword` from `TestSettings.cs` entirely — admin is a fixed seed
+account like the other four, documented in the AUT's own README, not something a different
+environment would plausibly override, so it didn't belong being environment-driven in the first
+place. Removed `PETCLINIC_ADMIN_USERNAME`/`PETCLINIC_ADMIN_PASSWORD` from `.env.example` and
+`docker-compose.yml`, and the corresponding row from `README.md`'s Configuration table.
+
+Replaced all 13 call sites across both projects (`TestSettings.AdminUsername`/`AdminPassword` →
+`SeedAccounts.Admin.Username`/`Password`) — every file that referenced the old properties already
+imported `PetClinic.Tests.Shared.Configuration` (the namespace both `TestSettings` and
+`SeedAccounts` live in), so no `using` changes were needed anywhere.
+
+Verified: both projects build with zero warnings/errors; ran both suites locally and once more
+through Docker (rebuilt the image, `docker compose run --rm tests all`) with no `.env` file present
+and no admin env vars set at all, confirming the credentials now come purely from the compiled-in
+constant. Results matched the prior turn's post-reset baseline exactly (API 14/10/4, UI 10/6/4) —
+see Prompt 44 for why the API split is 10/4 instead of the original 9/5 (an external database reset,
+unrelated to any of this session's code changes).
+
+Not committed — per established policy, only committing when explicitly asked.
+
+**Prompt 46:**
+
+```
+There are no invoices currently in DB, run the tests and confirm independence on pre seeded invoice id/number.
+
+Do you think the "Seed data resets via.." assumption should be removed if pre seeded invoices are proved to be unnecessary.
+```
+
+Confirmed the DB was genuinely empty (`GET /api/invoices` → `totalElements: 0`) before running anything,
+then ran the full API suite: 14 tests, 10 passed, 4 failed — same four defect tests as the prior
+(reset-data) baseline, no crashes, no invoice-ID-related errors. Grepped the whole `src/` tree for
+any hardcoded invoice number/ID pattern (`INV-2024-...`, literal `/invoices/{n}`, etc.) — none found;
+every test that needs an invoice creates its own via `PetClinicApiClient`.
+
+That full run alone wasn't conclusive proof of independence, though — `Defect5PaginationTests`
+computes `totalPages` from a live list call and requests page `totalPages - 1`. It only avoided
+exercising `totalPages == 0` because other tests happened to run first (shared DB, no fixture of its
+own) and had already created invoices by the time it executed — ordering luck, not actual
+independence. Verified this is a real gap, not theoretical: `curl`'d `GET /api/invoices?page=-1`
+directly and got a raw `500 Internal Server Error` ("Page index must not be less than zero"), which
+would have surfaced as an unhandled `NullReferenceException` on `lastPage.Data!.Last` (a `500`
+carries no `Data`) rather than a clean, informative test failure, had this test run first against a
+truly empty table.
+
+Fixed both `Defect5PaginationTests.cs` files (API and UI) to create their own invoice fixture first,
+same as every other test that needs one, removing the dependency on ambient list state entirely.
+Updated `AssemblySetup.cs`'s (UI) doc comment to add Defect #5 to the list of tests that seed via
+direct API calls. Verified the fix actually holds, not just re-ran the full suite: filtered
+`dotnet test --filter "FullyQualifiedName~Defect5PaginationTests"` to run each one in isolation —
+the API one now passes standalone, and the UI one fails standalone with the correct, expected
+Playwright assertion ("Locator expected to be disabled... unexpected value 'enabled'"), i.e. it
+still correctly reproduces Defect #5, not a crash from the fixture-creation change. Re-ran the full
+suites (locally and through a rebuilt Docker image) afterward and got the same 10/4 (API) and 6/4
+(UI) split as before the fix — the change only removed a latent fragility, it didn't change any
+test's actual pass/fail outcome.
+
+On whether to remove the "Seed data resets via..." assumption (`test-plan.md` §3) now that
+pre-seeded invoices have been shown unnecessary: recommended **against** removing it, and explained
+why rather than just picking a side — the investigation above is itself the argument. That bullet
+states two things: seed data resets via `docker compose down -v`, and tests that mutate invoices
+"must not assume a specific invoice ID/number is available unless the test creates it itself." The
+second half isn't a moot historical assumption that automation later proved unnecessary — it's a
+live design rule, and this very session found a real violation of it (the pagination tests) that
+had gone unnoticed because ordering happened to mask it. Removing the assumption now, right after it
+caught a real bug, would read backwards. Also flagged the standing convention from earlier in this
+session: `test-plan.md` is treated as a historical record of Task 1's methodology and assumptions
+at the time, not a living document that gets rewritten as Task 2/3 automation confirms or violates
+things — same reasoning already applied to not rewriting the defect list or PROMPTS.md's own
+chronological entries when later findings changed the picture.
+
+Not committed — per established policy, only committing when explicitly asked.
