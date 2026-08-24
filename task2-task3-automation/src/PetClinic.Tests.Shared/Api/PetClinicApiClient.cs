@@ -13,6 +13,10 @@ namespace PetClinic.Tests.Shared.Api;
 /// </summary>
 public sealed class PetClinicApiClient : IDisposable
 {
+    // "dog", per GET /api/pet-types — reference/taxonomy data, not seeded test
+    // data, so unlike owners it's fine to rely on this id being stable.
+    private const int DogTypeId = 2;
+
     private readonly RestClient _client = new(TestSettings.ApiBaseUrl);
     private string? _token;
 
@@ -32,9 +36,66 @@ public sealed class PetClinicApiClient : IDisposable
         _token = response.Data.Token;
     }
 
+    /// <summary>
+    /// Creates an invoice. When <paramref name="ownerId"/> is omitted, uses
+    /// <see cref="SharedTestOwner"/> — the one owner created once per test-assembly
+    /// run — rather than a specific pre-seeded owner (e.g. id 6 / "Jean Coleman")
+    /// that might not stay present or unmutated across runs, and rather than
+    /// creating a fresh owner per call (see SharedTestOwner's doc comment for why:
+    /// the invoice UI's owner dropdown only shows the first 100 owners).
+    /// </summary>
     public Task<RestResponse<InvoiceResponse>> CreateInvoiceAsync(
-        int ownerId, decimal taxRate, decimal discountPct) =>
-        Execute<InvoiceResponse>("/api/invoices", Method.Post, new { ownerId, taxRate, discountPct });
+        decimal taxRate, decimal discountPct, int? ownerId = null)
+    {
+        var resolvedOwnerId = ownerId ?? SharedTestOwner.Owner?.Id
+            ?? throw new InvalidOperationException(
+                "No owner id available: pass ownerId explicitly, or ensure SharedTestOwner.Owner " +
+                "is set before any test runs (see each project's AssemblySetup.EnsureAppIsRunning).");
+        return Execute<InvoiceResponse>("/api/invoices", Method.Post,
+            new { ownerId = resolvedOwnerId, taxRate, discountPct });
+    }
+
+    private Task<RestResponse<OwnerResponse>> CreateOwnerAsync(
+        string firstName, string lastName, string address, string city, string telephone, string email) =>
+        Execute<OwnerResponse>("/api/owners", Method.Post,
+            new { firstName, lastName, address, city, telephone, email });
+
+    private Task<RestResponse<PetResponse>> AddPetAsync(int ownerId, string name, int typeId = DogTypeId) =>
+        Execute<PetResponse>($"/api/owners/{ownerId}/pets", Method.Post, new { name, typeId });
+
+    /// <summary>
+    /// Creates a fresh owner with one pet. Telephone/email are synthesized to
+    /// satisfy the API's validation (telephone: exactly 10 digits; email:
+    /// well-formed) — the API doesn't enforce uniqueness on either, but a random
+    /// suffix keeps each test run's fixture distinct and traceable regardless.
+    ///
+    /// lastName is prefixed "AAA" deliberately: the invoice UI's owner dropdown
+    /// only shows the first 100 owners, sorted by lastName (Defect #6,
+    /// test-plan.md §8), and this repo's own accumulated test-data owners alone
+    /// already exceed 100 — confirmed live that "AAA..." sorts ahead of every
+    /// real seed surname and every other synthetic owner this method has ever
+    /// created, so this owner lands on the dropdown's first page regardless of
+    /// how many other owners exist. Without this, only reducing how often
+    /// owners get created (see SharedTestOwner) still leaves each one's
+    /// visibility down to chance.
+    /// </summary>
+    public async Task<OwnerResponse> CreateOwnerWithPetAsync()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var telephone = Random.Shared.Next(1000000000, 2000000000).ToString();
+
+        var owner = await CreateOwnerAsync(
+            firstName: "QA",
+            lastName: $"AAAOwner{suffix}",
+            address: "1 Test St",
+            city: "Testville",
+            telephone: telephone,
+            email: $"qa.owner.{suffix}@example.test");
+
+        await AddPetAsync(owner.Data!.Id, $"Pet{suffix}");
+
+        return owner.Data;
+    }
 
     public Task<RestResponse<InvoiceResponse>> AddItemAsync(
         int invoiceId, string description, string itemType, int quantity, decimal unitPrice) =>
@@ -69,21 +130,22 @@ public sealed class PetClinicApiClient : IDisposable
     /// <summary>
     /// Creates a draft invoice with one line item — the common precondition most
     /// tests here need, built with whatever role this client is currently
-    /// authenticated as.
+    /// authenticated as. Owned by the shared test owner unless
+    /// <paramref name="ownerId"/> is given — see <see cref="CreateInvoiceAsync"/>.
     /// </summary>
     public async Task<InvoiceResponse> CreateDraftInvoiceWithItemAsync(
-        int ownerId = 6, decimal taxRate = 0.10m, decimal discountPct = 0m, decimal unitPrice = 100m)
+        decimal taxRate = 0.10m, decimal discountPct = 0m, decimal unitPrice = 100m, int? ownerId = null)
     {
-        var created = await CreateInvoiceAsync(ownerId, taxRate, discountPct);
+        var created = await CreateInvoiceAsync(taxRate, discountPct, ownerId);
         var withItem = await AddItemAsync(created.Data!.Id, "Consultation", "SERVICE", 1, unitPrice);
         return withItem.Data!;
     }
 
     /// <summary>Same as <see cref="CreateDraftInvoiceWithItemAsync"/>, additionally issued.</summary>
     public async Task<InvoiceResponse> CreateIssuedInvoiceAsync(
-        int ownerId = 6, decimal taxRate = 0.10m, decimal discountPct = 0m, decimal unitPrice = 100m)
+        decimal taxRate = 0.10m, decimal discountPct = 0m, decimal unitPrice = 100m, int? ownerId = null)
     {
-        var invoice = await CreateDraftInvoiceWithItemAsync(ownerId, taxRate, discountPct, unitPrice);
+        var invoice = await CreateDraftInvoiceWithItemAsync(taxRate, discountPct, unitPrice, ownerId);
         var issued = await IssueInvoiceAsync(invoice.Id);
         return issued.Data!;
     }

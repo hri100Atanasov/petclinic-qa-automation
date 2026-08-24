@@ -1,3 +1,4 @@
+using PetClinic.Tests.Shared.Api;
 using PetClinic.Tests.Shared.Configuration;
 using PetClinic.Tests.Ui.Pages;
 using PetClinic.Tests.Ui.Setup;
@@ -23,7 +24,8 @@ public class InvoiceLifecycleTests : PetClinicPageTest
 
         var listPage = new InvoiceListPage(Page);
         await listPage.NavigateAsync(TestSettings.UiBrowserUrl);
-        var invoiceId = await listPage.CreateDraftInvoiceAsync("Jean Coleman", taxRate: 0.10m, discountPct: 0m);
+        var invoiceId = await listPage.CreateDraftInvoiceAsync(
+            SharedTestOwner.Owner.FullName, taxRate: 0.10m, discountPct: 0m);
 
         var detailPage = new InvoiceDetailPage(Page);
         await detailPage.NavigateAsync(TestSettings.UiBrowserUrl, invoiceId);

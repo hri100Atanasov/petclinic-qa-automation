@@ -38,7 +38,7 @@ public class RbacTests
         using var client = new PetClinicApiClient();
         await client.AuthenticateAsync(username, password);
 
-        var create = await client.CreateInvoiceAsync(ownerId: 6, taxRate: 0.10m, discountPct: 0m);
+        var create = await client.CreateInvoiceAsync(taxRate: 0.10m, discountPct: 0m);
         var addItem = await client.AddItemAsync(_draftWithItem.Id, "Extra", "SERVICE", 1, 10m);
         var issue = await client.IssueInvoiceAsync(_draftWithItem.Id);
         var pay = await client.PayInvoiceAsync(_issuedInvoice.Id, 10m, "CASH");
@@ -60,7 +60,7 @@ public class RbacTests
         using var client = new PetClinicApiClient();
         await client.AuthenticateAsync(SeedAccounts.Reception.Username, SeedAccounts.Reception.Password);
 
-        var create = await client.CreateInvoiceAsync(ownerId: 6, taxRate: 0.10m, discountPct: 0m);
+        var create = await client.CreateInvoiceAsync(taxRate: 0.10m, discountPct: 0m);
         var addItem = await client.AddItemAsync(create.Data!.Id, "Consultation", "SERVICE", 1, 50m);
         var issue = await client.IssueInvoiceAsync(create.Data.Id);
         var pay = await client.PayInvoiceAsync(create.Data.Id, 55m, "CASH");

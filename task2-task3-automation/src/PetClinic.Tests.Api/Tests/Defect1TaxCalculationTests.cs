@@ -28,7 +28,7 @@ public class Defect1TaxCalculationTests
     [Test]
     public async Task Tax_Is_Computed_On_The_Taxable_Amount_Not_The_Subtotal()
     {
-        var created = await _client.CreateInvoiceAsync(ownerId: 6, taxRate: 0.10m, discountPct: 20m);
+        var created = await _client.CreateInvoiceAsync(taxRate: 0.10m, discountPct: 20m);
         var withItem = await _client.AddItemAsync(created.Data!.Id, "Consultation", "SERVICE", 1, 100m);
         var totals = withItem.Data!.Totals;
 

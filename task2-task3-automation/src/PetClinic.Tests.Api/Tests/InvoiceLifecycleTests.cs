@@ -36,7 +36,7 @@ public class InvoiceLifecycleTests
         // Run the whole lifecycle first, unconditionally — Assert.Multiple throws
         // once its block ends if anything inside failed, which would otherwise
         // abort the test before issue/pay ever ran.
-        var created = await _client.CreateInvoiceAsync(ownerId: 6, taxRate: 0.10m, discountPct: 15m);
+        var created = await _client.CreateInvoiceAsync(taxRate: 0.10m, discountPct: 15m);
         var invoiceId = created.Data!.Id;
 
         await _client.AddItemAsync(invoiceId, "Consultation", "SERVICE", quantity: 2, unitPrice: 30m);

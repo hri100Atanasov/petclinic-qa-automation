@@ -1,3 +1,4 @@
+using PetClinic.Tests.Shared.Api;
 using PetClinic.Tests.Shared.Configuration;
 using PetClinic.Tests.Shared.HealthCheck;
 
@@ -12,9 +13,9 @@ using PetClinic.Tests.Shared.HealthCheck;
 /// the API directly (see PetClinic.Tests.Shared.Api.PetClinicApiClient), so a
 /// UI-only check would pass while the API is down and those tests would then
 /// fail on a raw connection error instead of this fatal, readable setup error.
-/// If either check fails, NUnit reports it as a fatal setup error carrying the
-/// message from PetClinicAvailabilityChecker, and no individual tests run at
-/// all.
+/// Also creates the one shared owner (SharedTestOwner) this suite's tests
+/// reuse. If any step fails, NUnit reports it as a fatal setup error and no
+/// individual tests run at all.
 /// </summary>
 [SetUpFixture]
 public class AssemblySetup
@@ -24,5 +25,9 @@ public class AssemblySetup
     {
         await PetClinicAvailabilityChecker.EnsureUiReachableAsync(TestSettings.UiBaseUrl);
         await PetClinicAvailabilityChecker.EnsureApiHealthyAsync(TestSettings.ApiBaseUrl);
+
+        using var client = new PetClinicApiClient();
+        await client.AuthenticateAsync(SeedAccounts.Admin.Username, SeedAccounts.Admin.Password);
+        SharedTestOwner.Owner = await client.CreateOwnerWithPetAsync();
     }
 }

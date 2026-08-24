@@ -1,3 +1,4 @@
+using PetClinic.Tests.Shared.Api;
 using PetClinic.Tests.Shared.Configuration;
 using PetClinic.Tests.Shared.HealthCheck;
 
@@ -7,10 +8,10 @@ using PetClinic.Tests.Shared.HealthCheck;
 // namespace they live in, avoiding that footgun.
 
 /// <summary>
-/// Runs once before any API test. Only checks the API's health endpoint —
-/// that's what's relevant to this suite. If it fails, NUnit reports it as a
-/// fatal setup error carrying the message from PetClinicAvailabilityChecker,
-/// and no individual tests run at all.
+/// Runs once before any API test. Checks the API's health endpoint, then
+/// creates the one shared owner (SharedTestOwner) this suite's tests reuse. If
+/// either step fails, NUnit reports it as a fatal setup error and no individual
+/// tests run at all.
 /// </summary>
 [SetUpFixture]
 public class AssemblySetup
@@ -19,5 +20,9 @@ public class AssemblySetup
     public async Task EnsureAppIsRunning()
     {
         await PetClinicAvailabilityChecker.EnsureApiHealthyAsync(TestSettings.ApiBaseUrl);
+
+        using var client = new PetClinicApiClient();
+        await client.AuthenticateAsync(SeedAccounts.Admin.Username, SeedAccounts.Admin.Password);
+        SharedTestOwner.Owner = await client.CreateOwnerWithPetAsync();
     }
 }

@@ -75,3 +75,23 @@ public sealed class InvoiceSummary
     public decimal AmountPaid { get; set; }
     public decimal Balance { get; set; }
 }
+
+public sealed class OwnerResponse
+{
+    public int Id { get; set; }
+    public string FirstName { get; set; } = "";
+    public string LastName { get; set; } = "";
+    public string FullName { get; set; } = "";
+    public string Address { get; set; } = "";
+    public string City { get; set; } = "";
+    public string Telephone { get; set; } = "";
+    public string Email { get; set; } = "";
+}
+
+public sealed class PetResponse
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public int TypeId { get; set; }
+    public int OwnerId { get; set; }
+}
