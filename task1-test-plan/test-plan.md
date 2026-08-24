@@ -68,10 +68,11 @@ Ranked by business impact, based on exploration to date:
 | # | Risk | Impact | Evidence |
 |---|---|---|---|
 | 1 | Tax miscalculation (computed on subtotal, not taxable amount) | Every discounted invoice over-charges tax — direct financial/compliance exposure, on every sale with a discount | Confirmed, Defect #1 |
-| 2 | Disabled accounts can still authenticate and act on billing | Compliance/audit risk — an offboarded employee retains a live financial write capability for up to the token TTL (120 min) after being disabled | Confirmed, Defect #4 |
+| 2 | Disabled accounts can still authenticate and act on billing | Compliance/audit risk — a disabled account can still authenticate and obtain a fresh session at any time after being disabled, not merely retain a pre-existing token | Confirmed, Defect #4 |
 | 3 | Invoices can be overpaid without rejection or credit handling | Negative balances, incorrect status, downstream reporting/reconciliation errors | Confirmed, Defect #2 |
 | 4 | PAID invoices can carry a non-zero balance | Breaks the PAID-means-settled invariant that reporting/reconciliation likely relies on | Confirmed, Defect #3 |
 | 5 | Pagination `last` flag not respected by the UI's Next control | Users can page past the end of results; low financial impact but a data-integrity/UX smell that erodes confidence in the rest of the list view | Confirmed, Defect #5 |
+| 6 | Owner selection in the invoice-creation form is capped at the first 100 owners, with no further pagination or search | Caps business capacity — once a clinic has more than 100 registered owners, front-desk staff cannot create an invoice for anyone sorting past the 100th via the UI at all, regardless of role | Confirmed, Defect #6 |
 
 The concentration of confirmed defects around *calculation* and *state-invariant* logic (rather
 than, say, layout) is itself informative: it raises prior for **other arithmetic paths** (e.g.
@@ -123,7 +124,7 @@ weight in the scenario list.
 - Every confirmed defect (§8) has a corresponding scenario demonstrating it, filed with repro
   steps, so the defect is regression-testable once fixed.
 - No **new** untriaged high-severity defect discovered in the last full pass through the scenario
-  list (i.e. the list has stabilized, not that it's defect-free — five defects are already known and
+  list (i.e. the list has stabilized, not that it's defect-free — six defects are already known and
   accepted as open going into exit).
 - Open questions in §10 are either answered or explicitly carried forward as documented
   assumptions.
@@ -162,6 +163,15 @@ than the ad hoc verification used here.
 5. **Pagination: Next control stays active on the last page.** `GET /api/invoices?page=2&size=10`
    returns `"last": true`, but the Next button in the UI remains active/clickable on the last
    page instead of being disabled.
+6. **Owner selection in the invoice-creation form is capped at the first 100 owners.** The
+   new-invoice form's owner dropdown requests `GET /api/owners?size=100` and never requests a
+   further page — confirmed via the browser's network tab. The API itself paginates correctly
+   (`page`, `size`, `totalElements`, `totalPages` all present; `page=1&size=100` returns a
+   genuinely different set of owners), so this is UI-only, not an API limitation. Owners are
+   sorted by `lastName` ascending with no search or "load more" control inside the dropdown, so
+   with more than 100 owners on file, anyone sorting past the 100th is entirely unreachable from
+   this form. Confirmed directly: with over 300 owners in the database, the dropdown rendered
+   exactly 100 selectable options (plus the placeholder), well short of the full list.
 
 ## 9. Scenario list (titles + one-line intent)
 
@@ -209,6 +219,8 @@ Negative / boundary (the higher-value half, given the risk profile):
 - **S16 — Billing controls in the UI match each role's permission level.** READONLY/VET see no
   write controls, RECEPTIONIST gets full access minus void, ADMIN gets full access including void;
   UI-level, to be confirmed in Task 2.
+- **S17 — Owner selection in the invoice form is capped at the first 100 owners with no
+  pagination.** Directly targets defect #6; UI-level, to be confirmed in Task 2.
 
 S1, S2, S3, S6, S8, S9, and S15 are written up in full (preconditions, steps, test data, expected
 result) in `scenarios-full.md`.
