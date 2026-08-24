@@ -1,3 +1,4 @@
+using PetClinic.Tests.Shared.Api;
 using PetClinic.Tests.Shared.Configuration;
 using PetClinic.Tests.Ui.Pages;
 using PetClinic.Tests.Ui.Setup;
@@ -17,6 +18,13 @@ public class Defect5PaginationTests : PetClinicPageTest
     [Test]
     public async Task Next_Button_Is_Disabled_On_The_Last_Page()
     {
+        // Guarantee at least one invoice exists regardless of ambient DB state —
+        // an empty invoice list is a different, unrelated UI state (no pagination
+        // to exercise at all), not what this test is about.
+        using var apiClient = new PetClinicApiClient();
+        await apiClient.AuthenticateAsync(SeedAccounts.Admin.Username, SeedAccounts.Admin.Password);
+        await apiClient.CreateDraftInvoiceWithItemAsync();
+
         var loginPage = new LoginPage(Page);
         await loginPage.NavigateAsync(TestSettings.UiBrowserUrl);
         await loginPage.LoginAsync(SeedAccounts.Reception.Username, SeedAccounts.Reception.Password);
