@@ -69,8 +69,8 @@ the run exits non-zero if **either** suite failed.
 
 ```
 === Summary ===
-UI suite:  FAILED (6 passed, 3 failed)
-API suite: PASSED
+UI suite:  FAILED (6 passed, 4 failed)
+API suite: FAILED (9 passed, 5 failed)
 TRX + HTML reports written to ./testresults
 ```
 
@@ -82,7 +82,7 @@ Every run writes, per suite, to `./testresults/`:
 
 ### The UI suite is expected to fail right now — that's by design
 
-Three UI tests deliberately reproduce known, confirmed defects from Task 1
+Four UI tests deliberately reproduce known, confirmed defects from Task 1
 (`../task1-test-plan/test-plan.md` §8) and are written to assert the *correct* behavior, not the
 app's current behavior — so they fail until the underlying bug is fixed, and start passing (with
 no test changes needed) the moment it is:
@@ -90,6 +90,7 @@ no test changes needed) the moment it is:
 | Test | Defect | Asserts |
 |---|---|---|
 | `Defect1TaxCalculationTests` | #1 — tax computed on subtotal, not taxable amount | A 100%-discounted invoice's tax should be $0 |
+| `Defect2OverpaymentTests` | #2 — an invoice can be overpaid | Balance should never go negative after an overpayment |
 | `Defect4DisabledAccountTests` | #4 — a disabled account can still authenticate | `former.staff` (disabled) should be rejected at login |
 | `Defect5PaginationTests` | #5 — pagination `Next` stays active past the last page | `Next` should be disabled on the true last page |
 
@@ -97,6 +98,36 @@ The other 6 tests (login, the full invoice lifecycle, and 4 RBAC checks) pass an
 keep passing. This mirrors Task 1's own exit criteria: the module doesn't exit "green," it exits
 with a known, documented, regression-testable defect list — the same philosophy applied to
 automation instead of manual scenarios.
+
+### The API suite is also expected to fail right now — same reason, deeper layer
+
+Five API tests fail today, all rooted in the same three confirmed defects — API-layer isolation
+gives more precision than the UI tests can (exact decimal boundaries, direct JSON field checks, a
+system-wide data sweep) but doesn't change which underlying bugs they trace back to:
+
+| Test | Defect | Asserts |
+|---|---|---|
+| `Defect1TaxCalculationTests.Tax_Is_Computed_On_The_Taxable_Amount_Not_The_Subtotal` | #1 — tax computed on subtotal, not taxable amount | A 20%-discounted invoice's tax should be 8.00 (10% of the 80.00 taxable amount), not 10.00 |
+| `Defect2OverpaymentTests.Overpaying_By_One_Cent_Does_Not_Leave_A_Negative_Balance` | #2 — an invoice can be overpaid | Paying 2.01 against a 2.00 balance should not leave a negative balance |
+| `Defect3PaidBalanceIntegrityTests.Every_Paid_Invoice_Has_A_Zero_Balance` | #3 — PAID invoices with a non-zero balance | Every invoice currently in PAID status should have balance 0.00 (system-wide sweep, not specific invoice numbers — currently finds `INV-2024-0003` and `INV-2024-0004`) |
+| `Defect4DisabledAccountTests.Disabled_Account_Cannot_Log_In` | #4 — a disabled account can still authenticate | `former.staff` (disabled) should be rejected at login |
+| `InvoiceLifecycleTests.Full_Lifecycle_Computes_Every_Financial_Field_Correctly` | #1 (cascade) | Paid with the mathematically-correct total rather than the API's own inflated figure, a discounted+taxed invoice should reach PAID/balance 0.00 — it doesn't, because Defect #1 has already thrown off `taxAmount`, `total`, and everything computed from them |
+
+The other 9 tests (login, RBAC across all four roles, the two passing overpayment boundary cases,
+and the pagination contract check) pass and are expected to keep passing.
+
+The lifecycle test's failures aren't a 6th defect — `taxAmount`, `total`, `balance`, and `status`
+all fail there for the same root cause Defect #1 already covers, just observed at the end of a
+realistic multi-step flow instead of in isolation. `Defect1TaxCalculationTests` is the minimal,
+isolated reproduction; the lifecycle test shows the same bug's actual downstream consequence — a
+correctly-discounted-and-taxed invoice can't reach a clean paid state, because the app is still
+asking for and crediting the wrong amount at every step.
+
+`Defect5PaginationTests` in this suite is **not** in the table above and is expected to **pass** —
+Task 1 already established the API's own `last` flag is correct and Defect #5 is UI-only, so this
+test is a regression guard confirming the API's contract, not a reproduction. Likewise
+`RbacTests.Receptionist_Cannot_Void_Via_Api` passes: see "Known issues" below for why that
+correlates with a change from what this README previously said.
 
 ## If PetClinic Pro isn't running
 
@@ -118,9 +149,9 @@ reachable, you get one clear message instead of a wall of connection-refused fai
 ```
 
 The API suite checks only the API's `/actuator/health` endpoint. The UI suite checks *both* the UI
-and the API — several UI tests (RBAC, Defect #1) seed their fixtures with direct API calls (see
-`InvoiceTestData`), so a UI-only check would pass while the API is down and those tests would then
-fail on a raw connection error instead of this message.
+and the API — several UI tests (RBAC, Defect #1, Defect #2) seed their fixtures with direct API
+calls (see `PetClinic.Tests.Shared/Api/PetClinicApiClient.cs`), so a UI-only check would pass while
+the API is down and those tests would then fail on a raw connection error instead of this message.
 
 ## Stack
 
@@ -138,16 +169,17 @@ fail on a raw connection error instead of this message.
 Page Object Model (`src/PetClinic.Tests.Ui/Pages/`) — `LoginPage`, `InvoiceListPage`,
 `InvoiceDetailPage` — one class per distinct page/URL the app has. Assertions live in the tests,
 not the page objects. Fixtures for tests that don't create their own invoice through the UI are
-seeded directly via the API (`Fixtures/InvoiceTestData.cs`) — that's test *setup*, not what's under
-test, so it isn't bound by Task 1's UI-only exploratory methodology.
+seeded directly via the API, using the same `PetClinicApiClient` the API suite uses as its system
+under test (`PetClinic.Tests.Shared/Api/`, see "API test coverage" below) — that's test *setup*
+here, not what's under test, so it isn't bound by Task 1's UI-only exploratory methodology.
 
 Scoped to the Billing module, anchored on Task 1's own risk findings rather than broad coverage:
 
 - **Login + S1 (full lifecycle)** — the positive baseline; proves the UI's rendering pipeline
   surfaces correct computed values through real forms, not just that the API returns them.
-- **Defects #1, #4, #5** — the three confirmed Task 1 defects that are UI-observable or
-  UI-exclusive (§5's Next button bug can't be caught any other way). See "The UI suite is expected
-  to fail right now" above.
+- **Defects #1, #2, #4, #5** — confirmed Task 1 defects that are UI-observable or UI-exclusive
+  (§5's Next button bug can't be caught any other way). See "The UI suite is expected to fail
+  right now" above.
 - **RBAC at the UI layer** — new ground Task 1 didn't cover. Task 1 confirmed the *API* rejects
   unauthorized writes (test-plan.md §9, S10-S13); these tests check whether the *UI* actually hides
   those controls for READONLY/VET, or renders one that would then fail — a distinct
@@ -156,6 +188,40 @@ Scoped to the Billing module, anchored on Task 1's own risk findings rather than
 Left out deliberately: S2/S3 (multi-item totals, partial payments) — solid positive coverage, but
 at the UI layer they mostly re-prove "the screen displays what the API already computed," which is
 better-owned by Task 3 where more input combinations are cheap to test directly against the API.
+
+## API test coverage (Task 3)
+
+RestSharp (`src/PetClinic.Tests.Api/`), with a `PetClinicApiClient` wrapper and response model
+classes living in `PetClinic.Tests.Shared/Api/` — not this project — since the UI suite's own
+fixtures (RBAC, Defect #1, Defect #2) reuse the exact same client to seed invoices via the API
+rather than duplicating login/invoice-creation logic in both projects. In the API suite these calls
+are the system under test; in the UI suite they're setup (e.g. an admin-authenticated client
+creating a fixture invoice for another role's test) — unlike Task 2, there's no separate
+setup-vs-SUT boundary at this layer, only which project is calling the shared client and why.
+
+- **Login + full lifecycle (S1, S2)** — `InvoiceLifecycleTests` runs create → add two line items →
+  issue → pay in full, asserting every financial field (`subtotal`, `discountAmount`,
+  `taxableAmount`, `taxAmount`, `total`, `amountPaid`, `balance`) individually and combined
+  (`total == taxableAmount + tax`), on a multi-item invoice — closing S2 (multi-item subtotal) at
+  the API layer, since no UI test does.
+- **Defects #1, #2, #3, #4** — confirmed Task 1 defects, isolated directly against the API with more
+  precision than the UI allows: exact decimal boundaries (Defect #2's three-case BVA to the cent),
+  a minimal single-field reproduction (Defect #1), and a system-wide data-integrity sweep across
+  every PAID invoice (Defect #3 / S15) rather than specific invoice numbers. See "The API suite is
+  also expected to fail right now" above.
+- **Defect #5, at the API layer** — confirms the API's own `last` pagination flag is correct
+  (regression guard, expected to pass), isolating that the bug is UI-only.
+- **RBAC at the API layer (dual coverage with S16/UI RBAC, deliberately)** — the UI tests only prove
+  the front end *hides* controls it shouldn't show; they say nothing about whether the backend would
+  actually reject the request if one were sent anyway. `RbacTests` sends the requests directly:
+  READONLY/VET rejected (403) on every write action, RECEPTIONIST allowed to create/add
+  items/issue/pay but rejected on void, ADMIN allowed everything including void.
+
+Not automated here: S3 (partial payment) beyond what the boundary-value and lifecycle tests already
+exercise, and S10-S12 (zero/negative payment, immutable line items post-issue, no payment on a
+voided invoice) — all confirmed manually in Task 1 as working correctly and documented there as
+regression guards, but not re-automated in this pass since nothing in Task 1 or Task 2's exploration
+suggested they were at risk.
 
 ## Configuration (environment variables)
 
@@ -167,7 +233,6 @@ automatically.
 |---|---|---|---|
 | `UI_BASE_URL` | `http://localhost:8081` | `http://host.docker.internal:8081` | Where the UI readiness check looks |
 | `API_BASE_URL` | `http://localhost:8080` | `http://host.docker.internal:8080` | Where the API readiness check and all API tests point |
-| `PETCLINIC_ADMIN_USERNAME` / `PETCLINIC_ADMIN_PASSWORD` | `admin` / `admin123` | same | Seed admin credentials, per the AUT's README |
 | `UI_BROWSER_URL` | `http://localhost:8081` | `http://localhost:8081` (**not** overridden) | Where Playwright actually navigates the browser — see Known Issues for why this is kept separate from `UI_BASE_URL` |
 | `PLAYWRIGHT_RESOLVE_LOCALHOST_TO` | unset | `host.docker.internal` | Only meaningful in Docker — see Known Issues |
 
@@ -201,11 +266,14 @@ automatically.
   `InvoiceListPage`'s `ClickNextAsync`/`CreateDraftInvoiceAsync` all wait for their action's actual
   effect (network idle, or the specific value that should have changed) before returning, rather
   than trusting that a click resolving means the app has caught up.
-- **New finding, not yet automated:** `reception`'s API token can successfully void an invoice
-  (`POST /api/invoices/{id}/void` returns 200, confirmed during Task 1), but the UI never shows a
-  Void button to RECEPTIONIST — only ADMIN gets one. The UI's restriction is real but the API
-  doesn't enforce it; worth a dedicated API test in Task 3 rather than assuming the UI gap is the
-  whole story.
-- **Scope right now:** login, the full invoice lifecycle (S1), the three UI-observable Task 1
-  defects (#1, #4, #5), and UI-layer RBAC across all four roles — see "UI test coverage" above for
-  what's covered and why. Task 3 (API automation) comes next.
+- **Correction to a Task 1 finding, caught while building Task 3:** the README previously
+  documented that `reception`'s API token could void an invoice (`POST /api/invoices/{id}/void`
+  returning 200), based on a Task 1 finding. Re-verified directly against the running app while
+  building `RbacTests.Receptionist_Cannot_Void_Via_Api` — on both a DRAFT and a freshly-issued
+  invoice, with an admin void succeeding normally as a positive control — and got a consistent
+  `403 Forbidden` for reception both times. That earlier finding doesn't reproduce on the currently
+  running app; the test is written (and passes) as a regression guard confirming the 403, not a
+  defect reproduction. Left as a documented correction rather than silently dropped.
+- **Scope right now:** login, the full invoice lifecycle (S1, S2), UI-observable and API-level Task
+  1 defects (#1, #2, #3, #4, #5), and RBAC across all four roles at both the UI and API layers — see
+  "UI test coverage" and "API test coverage" below for what's covered and why.
