@@ -67,12 +67,41 @@ the run exits non-zero if **either** suite failed.
 
 ## What a run looks like
 
+Console output is intentionally terse: no per-test pass/fail lines, no assertion messages, no stack
+traces — just build/restore, a one-line result per suite, and the final summary. Full detail
+(assertion messages, stack traces, per-test duration) lives in the `.trx`/HTML report instead (see
+below), not on the console. This is `docker compose run --rm tests all`:
+
 ```
+=== Running UI tests (Playwright) ===
+Test run for /app/src/PetClinic.Tests.Ui/bin/Release/net10.0/PetClinic.Tests.Ui.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+WARNING: Overwriting results file: /app/testresults/ui-results.trx
+Results File: /app/testresults/ui-results.trx
+Html test results file : /app/testresults/ui-report.html
+
+Failed!  - Failed:     4, Passed:     6, Skipped:     0, Total:    10, Duration: 29 s - PetClinic.Tests.Ui.dll (net10.0)
+
+=== Running API tests (RestSharp) ===
+Test run for /app/src/PetClinic.Tests.Api/bin/Release/net10.0/PetClinic.Tests.Api.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+WARNING: Overwriting results file: /app/testresults/api-results.trx
+Results File: /app/testresults/api-results.trx
+Html test results file : /app/testresults/api-report.html
+
+Failed!  - Failed:     4, Passed:    10, Skipped:     0, Total:    14, Duration: 2 s - PetClinic.Tests.Api.dll (net10.0)
+
 === Summary ===
-UI suite:  FAILED (6 passed, 4 failed)
-API suite: FAILED (9 passed, 5 failed)
+UI suite:  FAILED
+API suite: FAILED
 TRX + HTML reports written to ./testresults
 ```
+
+("A total of 1 test files matched the specified pattern" refers to the one compiled test assembly
+per suite, not the test count — the real counts are in the `Failed!`/`Passed!` line: `Total: 10` for
+UI, `Total: 14` for API.) The runner (`dotnet run --project src/PetClinic.Tests.Runner -- all`)
+produces the same per-suite block, then opens both HTML reports automatically unless `--no-open` is
+passed.
 
 Every run writes, per suite, to `./testresults/`:
 - `{ui,api}-results.trx` — the raw VSTest result file
@@ -199,6 +228,19 @@ are the system under test; in the UI suite they're setup (e.g. an admin-authenti
 creating a fixture invoice for another role's test) — unlike Task 2, there's no separate
 setup-vs-SUT boundary at this layer, only which project is calling the shared client and why.
 
+Invoice fixtures use one owner created once per test-assembly run (`SharedTestOwner`, populated by
+each project's `AssemblySetup.EnsureAppIsRunning`) rather than reusing a specific pre-seeded owner
+(e.g. id 6 / "Jean Coleman") — no test's correctness depends on that owner still existing or being
+unmutated by a prior run. Telephone (exactly 10 digits) and email (well-formed) are synthesized per
+the API's own validation rules; a pet is added since an owner with no pets isn't representative of
+what the AUT expects a real owner record to look like. The owner's `lastName` is deliberately
+prefixed `AAA`: the invoice-creation UI's owner dropdown only shows the first 100 owners sorted by
+`lastName`, with no further pagination or search (Defect #6, `../task1-test-plan/test-plan.md` §8) —
+an earlier version of this fixture created a fresh, randomly-named owner per *test* rather than per
+*run*, which both grew the owner table quickly and left each new owner's dropdown visibility down to
+chance once the table passed 100 rows; sorting first regardless of table size, combined with
+creating only one owner per run instead of one per test, fixes both.
+
 - **Login + full lifecycle (S1, S2)** — `InvoiceLifecycleTests` runs create → add two line items →
   issue → pay in full, asserting every financial field (`subtotal`, `discountAmount`,
   `taxableAmount`, `taxAmount`, `total`, `amountPaid`, `balance`) individually and combined
@@ -256,6 +298,14 @@ automatically.
 - **No retry on the readiness check.** It checks once and fails fast with instructions;
   re-running the command after starting PetClinic is the expected workflow, not an automatic
   wait/retry loop.
+- **Two separate flags are needed to keep the console quiet, not one.**
+  `--logger "console;verbosity=quiet"` silences VSTest's own per-test output (assertion messages,
+  stack traces), but `dotnet test` separately invokes MSBuild's terminal logger in `auto` mode,
+  which — only when stdout is a real interactive terminal (not when piped, e.g. in CI or through a
+  tool) — prints its own failed-test summary with the full stack trace again, as compiler-style
+  `error TESTERROR:` diagnostics. `-tl:off` turns that off unconditionally. Dropping either flag
+  brings stack traces back under some conditions but not others, depending on how the command is
+  invoked — both are required together.
 - **`dotnet restore`/`dotnet build` only accept a single project path each** — passing two
   (`dotnet build a.csproj b.csproj`) fails with an MSBuild "switch syntax" error. The Dockerfile
   runs them once per project instead of trying to pass both at once. Only matters if you're
