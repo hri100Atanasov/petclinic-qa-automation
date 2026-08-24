@@ -103,6 +103,15 @@ UI, `Total: 14` for API.) The runner (`dotnet run --project src/PetClinic.Tests.
 produces the same per-suite block, then opens both HTML reports automatically unless `--no-open` is
 passed.
 
+**The API count above (4 failed) isn't fixed — it's sometimes 5.** `Defect3PaidBalanceIntegrityTests`
+sweeps every PAID invoice for a non-zero balance, a defect Task 1 could only reproduce on two
+specific *original seed* invoices (`INV-2024-0003`/`0004`), not on a freshly created one. Whether
+that test fails depends on whether those two invoices are currently present in the database — which
+depends on whether the AUT's Docker volume has been reset since they were last seeded. Every other
+failing test is self-contained and fails deterministically regardless of what else is in the
+database; this is the one exception, and it's a property of the underlying defect (§10 open
+questions in `../task1-test-plan/test-plan.md`), not test instability.
+
 Every run writes, per suite, to `./testresults/`:
 - `{ui,api}-results.trx` — the raw VSTest result file
 - `{ui,api}-report.html` — a self-contained HTML report (pass/fail counts, per-test list with
@@ -143,7 +152,10 @@ system-wide data sweep) but doesn't change which underlying bugs they trace back
 | `InvoiceLifecycleTests.Full_Lifecycle_Computes_Every_Financial_Field_Correctly` | #1 (cascade) | Paid with the mathematically-correct total rather than the API's own inflated figure, a discounted+taxed invoice should reach PAID/balance 0.00 — it doesn't, because Defect #1 has already thrown off `taxAmount`, `total`, and everything computed from them |
 
 The other 9 tests (login, RBAC across all four roles, the two passing overpayment boundary cases,
-and the pagination contract check) pass and are expected to keep passing.
+and the pagination contract check) pass and are expected to keep passing. `Defect3PaidBalanceIntegrityTests`
+is the one exception to "fails today" being a fixed statement — see the note above the earlier
+console example — so this can be 9 passed/5 failed or 10 passed/4 failed depending on whether
+`INV-2024-0003`/`0004` currently exist.
 
 The lifecycle test's failures aren't a 6th defect — `taxAmount`, `total`, `balance`, and `status`
 all fail there for the same root cause Defect #1 already covers, just observed at the end of a
