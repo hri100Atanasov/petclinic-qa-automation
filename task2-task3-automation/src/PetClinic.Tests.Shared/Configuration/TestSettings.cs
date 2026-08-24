@@ -31,9 +31,6 @@ public static class TestSettings
     public static string ApiBaseUrl =>
         GetEnvOrDefault("API_BASE_URL", "http://localhost:8080");
 
-    public static string AdminUsername => GetEnvOrDefault("PETCLINIC_ADMIN_USERNAME", "admin");
-    public static string AdminPassword => GetEnvOrDefault("PETCLINIC_ADMIN_PASSWORD", "admin123");
-
     private static string GetEnvOrDefault(string variable, string fallback)
     {
         var value = Environment.GetEnvironmentVariable(variable);

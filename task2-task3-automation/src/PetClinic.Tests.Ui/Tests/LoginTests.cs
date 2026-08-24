@@ -12,7 +12,7 @@ public class LoginTests : PetClinicPageTest
     {
         var loginPage = new LoginPage(Page);
         await loginPage.NavigateAsync(TestSettings.UiBrowserUrl);
-        await loginPage.LoginAsync(TestSettings.AdminUsername, TestSettings.AdminPassword);
+        await loginPage.LoginAsync(SeedAccounts.Admin.Username, SeedAccounts.Admin.Password);
 
         // "Sign out" only renders in the nav once a session is established, so it's
         // a reliable signal that login succeeded, regardless of which page loads first.

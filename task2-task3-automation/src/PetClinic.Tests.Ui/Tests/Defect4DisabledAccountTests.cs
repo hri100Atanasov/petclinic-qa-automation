@@ -15,11 +15,9 @@ public class Defect4DisabledAccountTests : PetClinicPageTest
     [Test]
     public async Task Disabled_Account_Cannot_Log_In()
     {
-        var (username, password) = SeedAccounts.FormerStaff;
-
         var loginPage = new LoginPage(Page);
         await loginPage.NavigateAsync(TestSettings.UiBrowserUrl);
-        await loginPage.LoginAsync(username, password);
+        await loginPage.LoginAsync(SeedAccounts.FormerStaff.Username, SeedAccounts.FormerStaff.Password);
 
         // Expected: login is rejected and no session is established.
         // Actual (Defect #4): the account logs in successfully despite being disabled.

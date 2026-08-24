@@ -12,8 +12,6 @@ services:
       # a different port, a remote environment, etc.).
       UI_BASE_URL: ${UI_BASE_URL:-http://host.docker.internal:8081}
       API_BASE_URL: ${API_BASE_URL:-http://host.docker.internal:8080}
-      PETCLINIC_ADMIN_USERNAME: ${PETCLINIC_ADMIN_USERNAME:-admin}
-      PETCLINIC_ADMIN_PASSWORD: ${PETCLINIC_ADMIN_PASSWORD:-admin123}
       # UI_BROWSER_URL deliberately NOT overridden — it stays "http://localhost:8081"
       # (its default) so the browser's Origin header is one PetClinic's CORS policy
       # accepts. PLAYWRIGHT_RESOLVE_LOCALHOST_TO is what actually redirects that
