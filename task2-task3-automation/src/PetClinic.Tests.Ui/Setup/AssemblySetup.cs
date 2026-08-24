@@ -8,12 +8,13 @@ using PetClinic.Tests.Shared.HealthCheck;
 
 /// <summary>
 /// Runs once before any UI test. Checks both the UI and the API: several UI
-/// tests (RBAC, Defect #1) seed their fixtures by calling the API directly
-/// (see InvoiceTestData), so a UI-only check would pass while the API is
-/// down and those tests would then fail on a raw connection error instead of
-/// this fatal, readable setup error. If either check fails, NUnit reports it
-/// as a fatal setup error carrying the message from
-/// PetClinicAvailabilityChecker, and no individual tests run at all.
+/// tests (RBAC, Defect #1, Defect #2, Defect #5) seed their fixtures by calling
+/// the API directly (see PetClinic.Tests.Shared.Api.PetClinicApiClient), so a
+/// UI-only check would pass while the API is down and those tests would then
+/// fail on a raw connection error instead of this fatal, readable setup error.
+/// If either check fails, NUnit reports it as a fatal setup error carrying the
+/// message from PetClinicAvailabilityChecker, and no individual tests run at
+/// all.
 /// </summary>
 [SetUpFixture]
 public class AssemblySetup

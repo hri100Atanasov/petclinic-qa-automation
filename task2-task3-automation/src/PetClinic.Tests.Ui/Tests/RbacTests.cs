@@ -1,5 +1,5 @@
+using PetClinic.Tests.Shared.Api;
 using PetClinic.Tests.Shared.Configuration;
-using PetClinic.Tests.Ui.Fixtures;
 using PetClinic.Tests.Ui.Pages;
 using PetClinic.Tests.Ui.Setup;
 
@@ -15,20 +15,24 @@ namespace PetClinic.Tests.Ui.Tests;
 [TestFixture]
 public class RbacTests : PetClinicPageTest
 {
-    private InvoiceTestData _testData = null!;
+    private PetClinicApiClient _apiClient = null!;
 
     [SetUp]
-    public void SetUp() => _testData = new InvoiceTestData();
+    public async Task SetUp()
+    {
+        _apiClient = new PetClinicApiClient();
+        await _apiClient.AuthenticateAsync(SeedAccounts.Admin.Username, SeedAccounts.Admin.Password);
+    }
 
     [TearDown]
-    public void TearDown() => _testData.Dispose();
+    public void TearDown() => _apiClient.Dispose();
 
-    [TestCase("auditor", "audit123")]
-    [TestCase("vet.carter", "vet123")]
+    [TestCase(SeedAccounts.Auditor.Username, SeedAccounts.Auditor.Password)]
+    [TestCase(SeedAccounts.Vet.Username, SeedAccounts.Vet.Password)]
     public async Task ReadOnly_Roles_See_No_Invoice_Manipulation_Controls(string username, string password)
     {
-        var draftWithItem = await _testData.CreateDraftInvoiceWithItemAsync();
-        var issuedInvoice = await _testData.CreateIssuedInvoiceAsync();
+        var draftWithItem = await _apiClient.CreateDraftInvoiceWithItemAsync();
+        var issuedInvoice = await _apiClient.CreateIssuedInvoiceAsync();
 
         var loginPage = new LoginPage(Page);
         await loginPage.NavigateAsync(TestSettings.UiBrowserUrl);
@@ -52,8 +56,8 @@ public class RbacTests : PetClinicPageTest
     [Test]
     public async Task Receptionist_Can_Create_Add_Items_Issue_And_Pay_But_Not_Void()
     {
-        var draftWithItem = await _testData.CreateDraftInvoiceWithItemAsync();
-        var issuedInvoice = await _testData.CreateIssuedInvoiceAsync();
+        var draftWithItem = await _apiClient.CreateDraftInvoiceWithItemAsync();
+        var issuedInvoice = await _apiClient.CreateIssuedInvoiceAsync();
 
         var loginPage = new LoginPage(Page);
         await loginPage.NavigateAsync(TestSettings.UiBrowserUrl);
@@ -77,11 +81,11 @@ public class RbacTests : PetClinicPageTest
     [Test]
     public async Task Admin_Has_Receptionist_Access_Plus_Void()
     {
-        var issuedInvoice = await _testData.CreateIssuedInvoiceAsync();
+        var issuedInvoice = await _apiClient.CreateIssuedInvoiceAsync();
 
         var loginPage = new LoginPage(Page);
         await loginPage.NavigateAsync(TestSettings.UiBrowserUrl);
-        await loginPage.LoginAsync(TestSettings.AdminUsername, TestSettings.AdminPassword);
+        await loginPage.LoginAsync(SeedAccounts.Admin.Username, SeedAccounts.Admin.Password);
         await Expect(loginPage.SignOutButton).ToBeVisibleAsync();
 
         var listPage = new InvoiceListPage(Page);

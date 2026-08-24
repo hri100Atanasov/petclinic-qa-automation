@@ -1,5 +1,5 @@
+using PetClinic.Tests.Shared.Api;
 using PetClinic.Tests.Shared.Configuration;
-using PetClinic.Tests.Ui.Fixtures;
 using PetClinic.Tests.Ui.Pages;
 using PetClinic.Tests.Ui.Setup;
 
@@ -17,8 +17,9 @@ public class Defect1TaxCalculationTests : PetClinicPageTest
     [Test]
     public async Task Tax_Is_Computed_On_Taxable_Amount_Not_Subtotal()
     {
-        using var testData = new InvoiceTestData();
-        var fullDiscountInvoice = await testData.CreateDraftInvoiceWithItemAsync(taxRate: 0.10m, discountPct: 100m, unitPrice: 100m);
+        using var apiClient = new PetClinicApiClient();
+        await apiClient.AuthenticateAsync(SeedAccounts.Admin.Username, SeedAccounts.Admin.Password);
+        var fullDiscountInvoice = await apiClient.CreateDraftInvoiceWithItemAsync(taxRate: 0.10m, discountPct: 100m, unitPrice: 100m);
 
         var loginPage = new LoginPage(Page);
         await loginPage.NavigateAsync(TestSettings.UiBrowserUrl);
