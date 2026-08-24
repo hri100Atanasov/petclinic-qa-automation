@@ -7,10 +7,10 @@ namespace PetClinic.Tests.Ui.Tests;
 
 /// <summary>
 /// Checks a new angle Task 1 didn't cover: Task 1 confirmed the API rejects
-/// unauthorized writes with 403 (test-plan.md §9, S10-S13). This checks whether
-/// the UI actually hides those actions for unauthorized roles, or renders a
-/// control that would then fail if clicked — a UX/authorization-awareness gap
-/// distinct from the already-confirmed API-level enforcement.
+/// unauthorized writes with 403 for READONLY/VET (test-plan.md §9, S13). This
+/// checks whether the UI actually hides those actions for unauthorized roles,
+/// or renders a control that would then fail if clicked — a UX/authorization-
+/// awareness gap distinct from the already-confirmed API-level enforcement.
 /// </summary>
 [TestFixture]
 public class RbacTests : PetClinicPageTest
