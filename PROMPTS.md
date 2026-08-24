@@ -1213,3 +1213,242 @@ things — same reasoning already applied to not rewriting the defect list or PR
 chronological entries when later findings changed the picture.
 
 Not committed — per established policy, only committing when explicitly asked.
+
+**Prompt 47:**
+
+```
+Change defect #4 impact in the Risks section to "Compliance/audit risk — a disabled account can still authenticate and obtain a fresh session at any time after being disabled, not merely retain a pre-existing token"
+```
+
+Replaced the Impact column for risk #2 (defect #4) in `test-plan.md` §4's Risks table with the exact
+wording given — the previous text ("retains a live financial write capability for up to the token
+TTL after being disabled") described the risk as bounded by an existing token's expiry; the new
+wording is broader and more accurate: the account can log in and get a brand-new token at any time,
+not just ride out one it already had.
+
+Not committed — per established policy, only committing when explicitly asked.
+
+**Prompt 48:**
+
+```
+I don't like the hard dependency on pre seeded owner for some of the tests - owner id = 6/"Jean Coleman".
+Implement functionality that creates a new owner prior to every test, so that every test run uses its own owner.
+Consider the following validation fields for the creation of an owner
+"field": "telephone",
+            "message": "must be exactly 10 digits",
+
+"field": "email",
+            "message": "must be a well-formed email address",
+After an owner is created, a pet should be added to the owner.
+```
+
+Verified the exact validation rules directly against the running app before writing anything: `POST
+/api/owners` with an empty body returns 400 with `firstName`/`lastName`/`address`/`city`/`telephone`
+all "must not be blank" (no `email` requirement at that stage); with a valid-shape-but-invalid
+`telephone`/`email` it returns exactly the two messages the prompt quoted. Confirmed no uniqueness
+constraint on telephone/email (creating the same payload twice both succeeded with 201, different
+ids) — random-suffixed data isn't required for correctness, only for traceability. Also confirmed
+`POST /api/owners/{id}/pets` requires `name` and `typeId` (not null), and `GET /api/pet-types` lists
+`dog` as id 2.
+
+Added `OwnerResponse`/`PetResponse` models and three methods to the shared `PetClinicApiClient`:
+`CreateOwnerAsync` (raw), `AddPetAsync` (raw), and `CreateOwnerWithPetAsync` — generates a random
+8-hex-char suffix for the name/email and a random 10-digit telephone, creates the owner, then adds
+one pet (typeId 2 / dog — reference/taxonomy data, not seeded test data, so unlike owner id 6 it's
+fine to keep this one stable).
+
+Rewired invoice creation to use it automatically: `CreateInvoiceAsync`'s `ownerId` parameter is now
+optional (`int? ownerId = null`); when omitted, it calls `CreateOwnerWithPetAsync()` first and uses
+the result. `CreateDraftInvoiceWithItemAsync`/`CreateIssuedInvoiceAsync` pass the same optional
+parameter through. This means every existing call site that already used the default owner (nearly
+all of them) now gets a fresh owner+pet with no test-file changes needed at all; only removed the
+four explicit `ownerId: 6` arguments left over from before (Defect1TaxCalculationTests,
+InvoiceLifecycleTests, RbacTests ×2, all API-suite) so nothing pins the old id anymore.
+
+One test needed real changes beyond that: the UI's `InvoiceLifecycleTests` (S1) drives the actual
+new-invoice form and selects an owner from a dropdown by name — it hardcoded `"Jean Coleman"`
+directly, the exact dependency flagged in the prompt. Now creates its own owner via the shared API
+client first and passes the returned `FullName` into the dropdown selector instead.
+
+Verified: both projects build clean; full API suite (14 tests) and UI suite (10 tests) both re-ran
+locally and through a rebuilt Docker image with the identical pass/fail split as the pre-existing
+baseline (API 10/4, UI 6/4) — this was a pure fixture-independence change, no test's actual
+pass/fail outcome should move, and none did. Spot-checked via `curl` that fresh "QA Owner{suffix}"
+records were actually being created (49 found after today's several runs), not just assumed from
+the code reading correctly. Added a short paragraph to README's "API test coverage (Task 3)" section
+documenting the new fixture behavior and why a pet is added.
+
+Not committed — per established policy, only committing when explicitly asked.
+
+**Prompt 49:**
+
+```
+The request that returns the list of owners for populating an invoice returns 100 owners and there is no pagination-> http://localhost:8081/api/owners?size=100
+When tests are executed multiple times this count is exceeded and it seems only the first 100 are returned.
+Rework the tests to create a single owner and use it prior to their execution.
+Also include the owner limit to the test plan. If owners exceed 100, there is no way on the UI to select an owner past the 100 returned. Place it as a known defect, place it in the one line scenarios and put it also in the risk table as it caps the business capacity.
+```
+
+Confirmed the root cause directly before changing anything: `curl` showed the API itself paginates
+`/api/owners` correctly (`page`/`size`/`totalElements`/`totalPages`, and `page=1&size=100` returns a
+genuinely different set of owners) — so this is UI-only. Then actually drove the app in a browser
+(logged in as reception, opened the new-invoice form, read the network log) rather than trusting
+that inference alone: confirmed the frontend requests exactly `GET /api/owners?size=100`, no `page`
+param, ever, and the owner `<select>` is a plain native dropdown with no search/typeahead/"load
+more" — 100 options plus the placeholder, sorted by `lastName` ascending, with the 300+ other
+owners simply absent. This also explained, retroactively, why Prompt 48's UI lifecycle test had
+started intermittently timing out: it was hitting exactly this cap.
+
+First fix attempt was incomplete, and I caught that myself before calling it done rather than after:
+changed the per-invoice owner auto-creation to instead create **one** owner once per test-assembly
+run (`SharedTestOwner`, populated in each project's `AssemblySetup.EnsureAppIsRunning`, consumed by
+`PetClinicApiClient.CreateInvoiceAsync`'s fallback) and reused by every test — cutting owner growth
+from ~9-10 per run to 2. Ran the UI suite once, S1 passed, looked done. Ran it again immediately
+after for stability confidence, and it failed — a 31-second timeout, the exact same symptom as
+before. The rate fix alone was wrong: with the table already past 100 owners, a *single* newly
+created owner still only has a chance of sorting into the dropdown's visible first 100, since its
+`lastName` was a random hex suffix with no relationship to alphabetical position. Reducing *how
+often* a new owner is created doesn't change *whether* any given one is reachable. Verified this
+diagnosis directly (created a test owner with `lastName: "AAATestSort"` via `curl`, confirmed it
+sorted to position 1 ahead of every real seed surname), then fixed `CreateOwnerWithPetAsync` to
+prefix `lastName` with `AAA` — guaranteeing first position regardless of how large the table ever
+gets, independent of the rate fix. Both fixes are needed for different reasons: the shared-owner
+change controls table growth (hygiene, and the user's explicit ask), the `AAA` prefix guarantees
+visibility despite the growth that's already happened and whatever accumulates going forward. Ran
+the UI's S1 test three times in a row afterward (all passed, ~3s each, no more timeouts) specifically
+because "it passed once" was exactly what looked true right before the first fix's gap surfaced.
+
+Reran both full suites locally and through a rebuilt Docker image afterward: API 14/10/4, UI 10/6/4
+— unchanged from baseline, confirming this was purely a fixture-reliability fix with no effect on
+actual pass/fail outcomes.
+
+Added Defect #6 to `test-plan.md` §8 (owner selection capped at the first 100, no pagination/search,
+UI-only per the API's own correct pagination), a matching row to the §4 risk table framed as
+capping business capacity (the exact framing requested), and S17 to the §9 scenario list in the same
+style as S14/S16 ("UI-level, to be confirmed in Task 2"). Also updated §7's exit-criteria count
+("five defects" → "six") for internal consistency within the same document, since this is a direct
+addition to test-plan.md's own live defect list at explicit request — different from the standing
+policy of not rewriting Task 1's history when *later, external* findings change the picture.
+
+Updated the now-stale README paragraph from Prompt 48 (it described "every invoice fixture gets its
+own freshly created owner," no longer true) to describe the shared-owner model and the `AAA` prefix
+reasoning instead, cross-referencing Defect #6.
+
+Not committed — per established policy, only committing when explicitly asked.
+
+**Prompt 50:**
+
+```
+What are the options for reducing the output on the console from the tests? The stacktrace clutters the whole console.
+```
+
+Laid out four options without implementing anything, given the previous prompt's revert: (1)
+`--logger "console;verbosity=quiet"` — no per-test output at all, message included; (2) filter only
+`entrypoint.sh` (Docker path), smaller footprint than the reverted attempt; (3) filter both
+`entrypoint.sh` and the Runner, i.e. what got reverted; (4) leave console output alone and rely on
+the HTML report the Runner already auto-opens. Recommended (1) as the default lean, (2) as the
+smallest real code change if the inline message still mattered.
+
+**Prompt 51:**
+
+```
+Implement option one so I can see how it looks like
+```
+
+Changed `--logger "console;verbosity=normal"` → `"console;verbosity=quiet"` in both of
+`entrypoint.sh`'s `run_ui`/`run_api` functions, and added the same `--logger "console;verbosity=quiet"`
+to the Runner's `DotnetTestFor` (it previously passed no console logger at all, which defaults to
+the same full-detail output as `normal` — confirmed this directly two prompts ago). Ran the API
+suite through both the Runner and `docker compose run` directly to show the actual result: console
+output drops to restore/build lines, the final `Failed! - Failed: 4, Passed: 10...` line, and the
+summary block — no test names, no messages, no stack traces at all. Exit code still correctly 1 in
+both cases. Full detail (assertion messages included) remains in `testresults/*-report.html`/`.trx`
+exactly as before.
+
+Not committed — per established policy, only committing when explicitly asked.
+
+**Prompt 52:**
+
+```
+I still see the stacktraces
+=== Running API tests (RestSharp) ===
+A total of 1 test files matched the specified pattern.
+NUnit Adapter 1.0.0.0: Test execution started
+Running all tests in /app/src/PetClinic.Tests.Api/bin/Release/net10.0/PetClinic.Tests.Api.dll
+   NUnit3TestExecutor discovered 14 of 14 NUnit test cases using Current Discovery mode, Non-Explicit run
+WARNING: Overwriting results file: /app/testresults/api-results.trx
+Results File: /app/testresults/api-results.trx
+Html test results file : /app/testresults/api-report.html
+
+Failed!  - Failed:     4, Passed:    10, Skipped:     0, Total:    14, Duration: 2 s - PetClinic.Tests.Api.dll (net10.0)
+  PetClinic.Tests.Api test net10.0 failed with 4 error(s) (4.7s)
+    /app/src/PetClinic.Tests.Api/Tests/Defect1TaxCalculationTests.cs(37): error TESTERROR:
+      Tax_Is_Computed_On_The_Taxable_Amount_Not_The_Subtotal (193ms): Error Message: ...
+      [full stack traces follow, same pattern for all 4 failures]
+```
+
+Reproduced locally first to isolate the cause rather than guessing at a second fix blind: running the
+same `--logger "console;verbosity=quiet"` command through the Bash tool (piped, non-interactive) did
+**not** show this extra block — only the earlier fix's clean output. That discrepancy was the key
+clue: this isn't the VSTest console logger at all (already confirmed suppressed by `quiet`) — it's a
+separate mechanism, the MSBuild **terminal logger**, which `dotnet test` invokes in `auto` mode by
+default (confirmed by deliberately triggering an MSBuild argument error, which exposed the full
+underlying command line including `-tlp:default=auto`). `auto` activates based on TTY detection: my
+own tool output is piped (non-TTY), so it never activated during my testing, but the user's real
+interactive terminal is a TTY, so it did — printing failed tests as compiler-style diagnostics
+(`file(line): error TESTERROR: ...`) independent of the vstest `--logger console` verbosity entirely.
+
+This is a gap in Prompt 51's verification worth being explicit about: confirming a console-output fix
+by only running it through a piped tool call, without access to a real interactive terminal, isn't
+sufficient when the behavior being fixed is itself TTY-dependent — the difference wasn't visible from
+where the check was run.
+
+Fixed by adding `-tl:off` (confirmed a real, recognized MSBuild switch — an actually-invalid flag
+produces `MSB1001: Unknown switch`, which `-tl:off` did not) to both `entrypoint.sh`'s `dotnet test`
+invocations and the Runner's `DotnetTestFor`, forcing the terminal logger off regardless of TTY
+detection. Rebuilt and reran through both the Runner and Docker directly — output and exit code
+(still 1 on failure) both correct in the same piped/non-TTY environment as before. Flagged directly
+to the user that this specific fix can't be visually confirmed from here, since the bug only
+reproduces in a real interactive terminal and this tool's own output is never one — asked them to
+confirm from their own terminal rather than claiming it's fixed.
+
+Not committed — per established policy, only committing when explicitly asked.
+
+**Prompt 53:**
+
+```
+It doesn't look bad
+Docker example
+[Docker output: UI 4 failed/6 passed/10 total, API 4 failed/10 passed/14 total, correct counts]
+dotnet example:
+[dotnet output: UI 0 failed/1 passed/1 total, API 0 failed/1 passed/1 total]
+Considering this output, can you refine What a run looks like in the readme file
+```
+
+Confirmed the `-tl:off` fix works from the user's own terminal — the pasted Docker output has no
+stack traces. Before using the pasted `dotnet` example as a documentation source, though, noticed
+its counts were off (`Total: 1` for each suite, vs the Docker example's correct 10/14) — the system
+had just shown several UI/API test files entirely commented out on disk. Read one directly to check
+whether that was still the current state before saying anything: it wasn't — the file was back to
+normal, active code. Concluded the local run had been taken while the suite was temporarily trimmed
+down (a sensible thing to do when specifically checking console *format*, not test correctness) and
+was already reverted, so no action was needed beyond noting it — rebuilt and reran the full suite via
+Docker to get a fresh, authoritative example rather than reusing either pasted output as-is, and it
+matched the Docker paste almost exactly (UI 10/6/4, API 14/10/4; duration varies run to run).
+
+Rewrote "What a run looks like" in `README.md` around that fresh output: the full per-suite console
+block (build/restore lines, the `Failed!`/`Passed!` summary line, the trx/html write confirmations)
+rather than just the trailing `=== Summary ===` block as before — worth doing now specifically
+because `verbosity=quiet` + `-tl:off` made the whole console output short enough to show in full,
+which wasn't true before (a full stack-trace dump would have made the section unusably long). Fixed
+a stale number while there: the section still said "9 passed, 5 failed" for the API suite, a leftover
+from before Prompt 46 established the current 10/4 baseline — never updated at the time. Added a
+parenthetical explaining "A total of 1 test files matched the specified pattern" refers to one
+compiled assembly, not test count, since that line reads confusingly next to a `Total: 10`/`Total: 14`
+a few lines later otherwise.
+
+Also added a "Known issues" bullet explaining why both `verbosity=quiet` and `-tl:off` are needed
+together (from Prompt 52's finding) — dropping either brings stack traces back under some invocation
+conditions but not others, which isn't obvious from reading either flag in isolation.
+
+Not committed — per established policy, only committing when explicitly asked.
