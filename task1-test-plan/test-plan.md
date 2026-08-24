@@ -157,9 +157,8 @@ than the ad hoc verification used here.
    affected invoices, did not reproduce a non-zero balance — root cause is still open (§10).
 4. **Disabled account can authenticate and use billing endpoints.** Logging in as `former.staff`
    (whose login response carries `enabled: false`) succeeds, and the resulting session can still
-   view/act on invoices. RBAC *scoping* itself works correctly for active accounts (`READONLY`
-   blocked from write actions, `VET` blocked from void) — the defect is narrowly that the
-   `enabled` flag isn't checked at authentication or at request time.
+   view/act on invoices. RBAC *scoping* itself works correctly for active accounts — the defect is
+   narrowly that the `enabled` flag isn't checked at authentication or at request time.
 5. **Pagination: Next control stays active on the last page.** `GET /api/invoices?page=2&size=10`
    returns `"last": true`, but the Next button in the UI remains active/clickable on the last
    page instead of being disabled.
@@ -207,6 +206,9 @@ Negative / boundary (the higher-value half, given the risk profile):
 - **S15 — PAID status implies zero balance (data-integrity check).** Directly targets defect #3; a
   system-wide sweep over all "Paid" invoices rather than a lookup of specific invoice numbers, so
   it stays valid and executable regardless of what the current invoice set contains.
+- **S16 — Billing controls in the UI match each role's permission level.** READONLY/VET see no
+  write controls, RECEPTIONIST gets full access minus void, ADMIN gets full access including void;
+  UI-level, to be confirmed in Task 2.
 
 S1, S2, S3, S6, S8, S9, and S15 are written up in full (preconditions, steps, test data, expected
 result) in `scenarios-full.md`.
