@@ -224,9 +224,9 @@ Scoped to the Billing module, anchored on Task 1's own risk findings rather than
   returns correct UTC data in both cases; the bug is entirely in how the browser renders it). See
   "The UI suite is expected to fail right now" above.
 - **RBAC at the UI layer** — new ground Task 1 didn't cover. Task 1 confirmed the *API* rejects
-  unauthorized writes (test-plan.md §9, S10-S13); these tests check whether the *UI* actually hides
-  those controls for READONLY/VET, or renders one that would then fail — a distinct
-  authorization-awareness risk from what's already proven at the API layer.
+  unauthorized writes with 403 for READONLY/VET (test-plan.md §9, S13); these tests check whether
+  the *UI* actually hides those controls for READONLY/VET, or renders one that would then fail — a
+  distinct authorization-awareness risk from what's already proven at the API layer.
 - **Defect #7 (due date timezone rendering)** — found while extending the suite, not from Task 1's
   original exploration: each test case opens its own browser context with a specific `TimezoneId`
   (Playwright's per-context timezone emulation) rather than the suite's UTC default, checking
@@ -355,5 +355,6 @@ automatically.
   running app; the test is written (and passes) as a regression guard confirming the 403, not a
   defect reproduction. Left as a documented correction rather than silently dropped.
 - **Scope right now:** login, the full invoice lifecycle (S1, S2), UI-observable and API-level Task
-  1 defects (#1, #2, #3, #4, #5), and RBAC across all four roles at both the UI and API layers — see
-  "UI test coverage" and "API test coverage" below for what's covered and why.
+  1 defects (#1, #2, #3, #4, #5, #7), and RBAC across all four roles at both the UI and API layers —
+  see "UI test coverage" and "API test coverage" below for what's covered and why. Defect #6 is
+  confirmed but deliberately not automated here — see the top-level README's "Known issues."
