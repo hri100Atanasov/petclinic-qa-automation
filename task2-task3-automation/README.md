@@ -354,6 +354,15 @@ automatically.
   `403 Forbidden` for reception both times. That earlier finding doesn't reproduce on the currently
   running app; the test is written (and passes) as a regression guard confirming the 403, not a
   defect reproduction. Left as a documented correction rather than silently dropped.
+- **`Defect5PaginationTests` gets slower as the database grows.** It walks to the true last page by
+  clicking `Next`, so its runtime scales with the invoice count (~47 clicks at ~470 invoices).
+  Repeated runs stay correct — nothing depends on a specific count — but on a database that Task 4
+  has been run against a few times, this is comfortably the slowest UI test. `docker compose down -v`
+  on the AUT brings it back down.
+- **Concurrency is out of scope here by construction.** Every test in both suites issues one request
+  at a time — a single test method, a single virtual user. Task 4 covers concurrent behavior and
+  found two defects (#8, #9) that neither of these suites could reproduce however thorough they got;
+  see `../task4-performance/DEFECTS.md`.
 - **Scope right now:** login, the full invoice lifecycle (S1, S2), UI-observable and API-level Task
   1 defects (#1, #2, #3, #4, #5, #7), and RBAC across all four roles at both the UI and API layers —
   see "UI test coverage" and "API test coverage" below for what's covered and why. Defect #6 is
