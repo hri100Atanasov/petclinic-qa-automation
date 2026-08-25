@@ -38,15 +38,9 @@ run. That directory is a working directory and is gitignored — the specific ru
 document are committed under [`reports-cited/`](reports-cited/) so every number below can be checked
 against its source.
 
-**Reproducing the capped-resource runs.** The "API capped to 1 CPU / 1 GiB" figures cited later come
-from layering [`docker-compose.resource-limits.yml`](docker-compose.resource-limits.yml) over the
-AUT's own compose file — it caps only the `api` container, deliberately, so one variable moves at a
-time. Nothing in the default run path uses it:
-
-```bash
-cd task4-performance
-docker compose -f ../../qa-test-automation-task/docker-compose.yml -f docker-compose.resource-limits.yml up -d
-```
+Full setup detail — prerequisites, environment variables, what each test is expected to produce,
+test-data behaviour, and how to reproduce the "API capped to 1 CPU / 1 GiB" runs cited later — is in
+[`README.md`](README.md) next to this file.
 
 ## Load model
 
