@@ -5,15 +5,18 @@ This file logs the AI-assisted portion of this submission, as required by the as
 ## Tools / models used
 
 - **Tool:** Claude Code (CLI agent)
-- **Model:** Claude Sonnet 5 (`claude-sonnet-5`)
+- **Model:** Claude Sonnet 5 (`claude-sonnet-5`) for Prompts 1–56 and all of Task 4
+- **Model:** Claude Opus 5 (`claude-opus-5`) for Prompts 57–59, the final cross-document review pass
 
 ## How to read this log
 
-Prompts are pasted verbatim, in the order they were given, under the task they relate to. Each entry will eventually be annotated (or summarized in the README/task docs) with:
+Prompts are pasted verbatim, in the order they were given, under the task they relate to. Each entry is annotated with:
 
 - What the model produced from the prompt
 - What I kept as-is, and what I rewrote or corrected myself
-- What the model got wrong, and how I caught it against the running application
+- What the model got wrong, and how I caught it against the running application — called out under a **What the model got wrong** heading wherever it happened, since that's the part the brief weighs most heavily
+
+**Task 4 keeps its own log.** Task 4 (performance) was built as a self-contained unit, so its prompts live in [`task4-performance/PROMPTS.md`](task4-performance/PROMPTS.md), numbered 1–10 there. Chronologically they follow Prompt 56 below. The two files together cover the whole submission.
 
 ---
 
@@ -1580,3 +1583,89 @@ is shown. Removed exactly that: the two unused locators and the one unused actio
 to confirm nothing depended on the removed members.
 
 Not committed — per established policy, only committing when explicitly asked.
+
+---
+
+## Final review pass — consistency audit across all five tasks
+
+**Prompt 57:**
+
+```
+Assess the  F:\Programming\Testing\Lab40\petclinic-qa-automation project against the qa-candidate-task.md requirements. Check for any discrepancies, contradictions, gaps. There is still uncommitted work, it will potentially be pushed after your check.
+```
+
+A read-only audit of the whole submission against the brief, with every numeric claim in the docs
+checked against the committed NBomber reports rather than taken at face value. What it confirmed as
+already correct: UI/API test counts (14 each, and the "six cases across five test methods" split),
+the conditional 4-vs-5 API failure explanation, all Test 6 curve figures, the Test 1/2/4 percentiles
+and CPU peaks, the 12-of-12 barrier trials, and `.gitignore` coverage.
+
+**What it found wrong — all in Task 4's documentation, which was the newest and least-revised part:**
+
+- **`SUMMARY.md` stated failure-rate ranges its own reports contradict.** Test 1 was documented as
+  "10.3% to 13.1% across runs", but `test1-20260825-153517` is 4 failures of 148 = **2.7%**, well
+  below the stated floor. `DEFECTS.md` gave Test 4 as 5.6–8.3% while `SUMMARY.md`'s own headline
+  table showed 9.2%. Both corrected to the true observed ranges (2.7–13.1% and 5.6–9.2%).
+- **The pool-saturation conclusion rested on one run of three, presented as reproducible.** Test 5 at
+  200 req/s: `hikaricp.connections.pending` reached 21 in run `153154` (p95 161ms) but stayed at
+  **0** in runs `153636` and `155531` (p95 62ms and 47ms). The document already disclosed run-to-run
+  variance for Tests 1 and 4 but not here, where it was largest. This was the most substantive
+  finding — the "connection pool saturates first" conclusion was over-claimed on a single
+  observation. Now reports all three runs, separates what holds in all of them (active connections
+  reach the configured maximum of 10 while CPU stays under half) from what does not (the specific
+  latency figure), and the README's "expect p95 in the low hundreds of ms" was corrected to the real
+  ~45–160ms spread.
+- **Leftovers from when Task 4 had four tests.** `SUMMARY.md` opened its load model with "All four
+  tests use a closed model" directly above a six-column table marking Tests 5 and 6 as *open*, and
+  the README put a full `all` run at "~200 invoices" when Test 6 alone creates 200 at its default
+  rate — the real figure is ~435 requests, ~400 succeeding.
+- **Test 3's request count was transcribed as 142; the cited report says 144.** All four of that
+  row's percentiles matched exactly, so it was a single-cell slip rather than a wrong run.
+- **The defect numbering could collide.** `DEFECTS.md` set up a "Performance Defect #1/#2"
+  convention specifically to avoid clashing with the test plan's #1–#7, then `SUMMARY.md` dropped the
+  qualifier in four places where bare "#1"/"#2" read as *tax* and *overpayment*. Fixed by removing
+  the failure mode instead of relying on the qualifier: Task 4's two are now **#8** and **#9** in one
+  global sequence.
+- **Gaps against the brief.** No consolidated defect list anywhere — nine findings split across two
+  files with no index, in a brief that calls finding real ones "a strong positive". The top-level
+  `PROMPTS.md` never mentioned Task 4's separate log. `.env` was offered as the way to redirect the
+  suites without noting it is read by Docker Compose only — the local runner and Task 4 read real
+  environment variables and load no `.env` file, and `.env.example` ships Docker values that are
+  wrong on the host. Prerequisites called Docker "the only hard requirement" and were contradicted
+  60 lines later by Task 4 requiring the SDK. `docker-compose.resource-limits.yml` was referenced in
+  zero documents despite `SUMMARY.md` quoting the capped runs it produces. And `SUMMARY.md` cited
+  report filenames that the new `.gitignore` rule excludes from the repo entirely.
+
+**Prompt 58:**
+
+```
+Propose fixes for all the gaps/issues you've found
+```
+
+Produced the fix list before touching anything, so the numbering change and the defect-table
+dependency could be sequenced rather than discovered mid-edit.
+
+**Prompt 59:**
+
+```
+Implement your fixes and push with sensible commits
+```
+
+Applied all of the above. Two things changed during implementation rather than being applied as
+proposed:
+
+- **The "voice inconsistency" I had flagged was not one.** I had noted that Task 4's log says "the
+  candidate" while the top-level log reads in one voice, and proposed harmonizing. Grepping before
+  editing showed the top-level log uses "the candidate" throughout as well — that split is the
+  established convention of the AI-usage log, and is exactly where Prompt 22 decided who-did-what
+  belongs. Only the deliverables were ever meant to read in one voice. Dropped the change; the one
+  edit kept ("at the candidate's request" out of Task 4's header) matches a removal Prompt 6 had
+  already made elsewhere for the same reason.
+- **The capped/uncapped 50 req/s POC reports were committed after all.** My first pass excluded them
+  from `reports-cited/` as superseded. Checking them showed every figure quoted from them is exact —
+  49.8%, 81.6%, p95 3.16s and 14.88s, 81 and 167 pending connections at active 10/10 — so they are
+  cited evidence and belong with the rest. The 400 req/s overshoot stays out, since those numbers
+  were discarded as invalid and committing them next to valid runs would invite misreading.
+
+Also corrected the model attribution above: this pass ran on Opus 5, not the Sonnet 5 used for
+everything before it.
