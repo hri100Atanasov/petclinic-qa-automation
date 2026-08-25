@@ -21,6 +21,15 @@ namespace PetClinic.Tests.Ui.Setup;
 /// reaches the host machine. Only applied when PLAYWRIGHT_RESOLVE_LOCALHOST_TO
 /// is set (i.e. inside the Docker image); a plain local run leaves Chromium's
 /// default resolution untouched.
+///
+/// Also defaults every test's browser context to the UTC timezone. PetClinic
+/// stores and returns dates in UTC but renders them in the browser's local
+/// timezone (per the AUT's own README) -- without pinning this, a date-sensitive
+/// assertion's correctness would depend on whatever timezone happens to be set
+/// on the machine running the suite, which test-plan.md's entry criteria already
+/// flagged as a manual assumption ("tester's browser/OS clock is set to UTC").
+/// This makes that assumption an enforced default instead. DueDateTimezoneTests
+/// deliberately overrides it per test case to check other timezones on purpose.
 /// </summary>
 public abstract class PetClinicPageTest : PageTest
 {
@@ -35,6 +44,19 @@ public abstract class PetClinicPageTest : PageTest
             options.Args = [.. args, $"--host-resolver-rules=MAP localhost {resolveTarget}"];
         }
 
+        return options;
+    }
+
+    public override BrowserNewContextOptions ContextOptions()
+    {
+        var options = base.ContextOptions();
+        options.TimezoneId = "UTC";
+        // Also pin the locale: confirmed live that without this, Chromium falls
+        // back to the host OS's regional format (e.g. "23.09.2026 г." on a
+        // Bulgarian-locale machine, not "9/23/2026") -- the suite's correctness
+        // shouldn't depend on which machine happens to run it, same reasoning
+        // as pinning the timezone above.
+        options.Locale = "en-US";
         return options;
     }
 }

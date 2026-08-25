@@ -5,8 +5,13 @@ namespace PetClinic.Tests.Ui.Pages;
 
 public class InvoiceDetailPage(IPage page)
 {
-    public ILocator InvoiceNumber => page.GetByTestId("invoice-number");
     public ILocator Status => page.GetByTestId("invoice-status");
+
+    // No data-testid on this one -- the detail page only tags it with a "Due"
+    // label div immediately followed by a plain, untagged value div.
+    // Adjacent-sibling CSS locator instead.
+    public ILocator DueDate => page.Locator("div.muted:text-is('Due') + div");
+
     public ILocator Subtotal => page.GetByTestId("totals-subtotal");
     public ILocator TaxableAmount => page.GetByTestId("totals-taxable");
     public ILocator TaxAmount => page.GetByTestId("totals-tax");
@@ -56,6 +61,4 @@ public class InvoiceDetailPage(IPage page)
         await PaymentSaveButton.ClickAsync();
         await PaymentModal.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
     }
-
-    public Task VoidInvoiceAsync() => VoidButton.ClickAsync();
 }

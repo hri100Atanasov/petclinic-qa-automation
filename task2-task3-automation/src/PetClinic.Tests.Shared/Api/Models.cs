@@ -21,6 +21,9 @@ public sealed class InvoiceResponse
     public string Status { get; set; } = "";
     public decimal TaxRate { get; set; }
     public decimal DiscountPct { get; set; }
+    // Date-only (e.g. "2026-09-24"), no time component -- see DueDateTimezoneTests.
+    public string? IssuedDate { get; set; }
+    public string? DueDate { get; set; }
     public List<InvoiceItemResponse> Items { get; set; } = [];
     public List<InvoicePaymentResponse> Payments { get; set; } = [];
     public InvoiceTotals Totals { get; set; } = new();
