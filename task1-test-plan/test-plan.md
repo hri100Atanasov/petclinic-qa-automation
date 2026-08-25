@@ -75,6 +75,11 @@ Ranked by business impact, based on exploration to date:
 | 6 | Owner selection in the invoice-creation form is capped at the first 100 owners, with no further pagination or search | Caps business capacity — once a clinic has more than 100 registered owners, front-desk staff cannot create an invoice for anyone sorting past the 100th via the UI at all, regardless of role | Confirmed, Defect #6 |
 | 7 | Invoice due date renders as the wrong calendar day for any viewer in a timezone behind UTC | Every invoice due date can display one day earlier than the actual due date for a majority of real-world timezones (all of the Americas and points west of Greenwich); risks a customer paying "late" against a due date the UI itself understated, or staff misjudging what's actually overdue | Confirmed, Defect #7 |
 
+Two further defects (#8, #9) were found later by Task 4's concurrency testing and are outside this
+plan's scope — it covers sequential behavior, and both of those need two requests to overlap. They
+are documented in `../task4-performance/DEFECTS.md`, and #9 bears directly on Defect #3's open root
+cause (§10).
+
 The concentration of confirmed defects around *calculation* and *state-invariant* logic (rather
 than, say, layout) is itself informative: it raises prior for **other arithmetic paths** (e.g.
 partial payments combined with discounts, void-after-partial-payment, multi-item invoices with
@@ -189,6 +194,11 @@ than the ad hoc verification used here.
    large ones — rolls it back to the previous calendar day. That covers a majority of real-world
    timezones (all of the Americas and everywhere else west of Greenwich), not an edge case.
 
+Defects #8 and #9 — the invoice-number race under concurrent creates, and concurrent payments
+leaving a fully paid invoice stuck at `PARTIALLY_PAID` — were found later, by Task 4's load testing,
+and are written up in `../task4-performance/DEFECTS.md`. They are not repeated here: this plan's
+methodology is sequential by construction and could not have surfaced either.
+
 ## 9. Scenario list (titles + one-line intent)
 
 Positive:
@@ -253,6 +263,13 @@ result) in `scenarios-full.md`.
   payment-timing or multi-payment sequence not yet tried, or a rounding edge case tied to exact
   cent values not yet isolated. Worth a targeted investigation once Task 3's direct API access
   makes it cheaper to sweep payment sequences than the UI does.
+  **Update from Task 4.** Concurrency testing produced a probable mechanism. Defect #9 is this
+  defect's mirror image — balance correct while `status` never reaches `PAID`, rather than `PAID`
+  with a balance left over — which is what one root cause would look like from either side of a
+  race: the `status` column and the computed payment totals not being updated atomically under
+  concurrent writes. Sequential reproduction was never going to trigger it, which is exactly why
+  this stayed open. Not proven without the source, but strong enough that the two should be
+  investigated together. See `../task4-performance/DEFECTS.md`.
 - Is there an intended credit-balance / refund feature that's simply not yet implemented, or is
   "reject overpayment outright" the intended behavior? Affects how S8's expected result should be
   worded in the full scenario write-up.
@@ -264,3 +281,7 @@ result) in `scenarios-full.md`.
   elsewhere.
 - No optimistic locking / conflict response was observed when probing; worth one dedicated check
   (two concurrent payments against the same invoice) before ruling it in or out of scope.
+  **Answered by Task 4.** That check was performed — ten concurrent payments against one issued
+  invoice. There is no conflict handling: all ten commit correctly (`amountPaid` 100.00, `balance`
+  0.00, all ten payment records present) while `status` never leaves `PARTIALLY_PAID`. Filed as
+  Defect #9 in `../task4-performance/DEFECTS.md`.
