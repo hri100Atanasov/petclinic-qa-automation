@@ -10,13 +10,13 @@ task in the brief is optional; this is what was attempted, why, and how to run i
 | 1 — Test plan and scenarios | Done — Billing module | [`task1-test-plan/`](task1-test-plan/test-plan.md) |
 | 2 — UI automation | Done — Playwright + NUnit | [`task2-task3-automation/`](task2-task3-automation/README.md) |
 | 3 — API automation | Done — RestSharp + NUnit | [`task2-task3-automation/`](task2-task3-automation/README.md) |
-| 4 — Performance test | **Not attempted** | — |
+| 4 — Performance test | Done — NBomber | [`task4-performance/`](task4-performance/SUMMARY.md) |
 | 5 — Setup guide and execution instructions | Done | this file |
 
-Task 4 wasn't attempted — time was spent going deeper on Tasks 1–3 instead (six automated defect
-reproductions, RBAC across four roles at both layers, and a test-data fixture that had to be
-reworked twice after it broke itself — see "Known issues" below) rather than adding a fourth,
-shallower task.
+All five tasks were attempted. Task 4 is kept deliberately self-contained — its own report, defect
+list, and AI-usage log under `task4-performance/` — because it uses a different tool (NBomber) and a
+different methodology (concurrent load) from Tasks 2/3, and its two findings are concurrency defects
+that the other suites structurally cannot reproduce.
 
 ## Repository layout
 
@@ -27,9 +27,15 @@ petclinic-qa-automation/
 ├── task1-test-plan/             ← Task 1: test plan + scenarios (Billing module)
 │   ├── test-plan.md
 │   └── scenarios-full.md
-└── task2-task3-automation/      ← Tasks 2 & 3: UI + API automation (one .NET solution)
-    ├── README.md                ← detailed setup/run/coverage docs for this project specifically
-    └── src/
+├── task2-task3-automation/      ← Tasks 2 & 3: UI + API automation (one .NET solution)
+│   ├── README.md                ← detailed setup/run/coverage docs for this project specifically
+│   └── src/
+└── task4-performance/           ← Task 4: load/concurrency testing (NBomber)
+    ├── SUMMARY.md               ← load model, results, conclusions
+    ├── DEFECTS.md               ← the two concurrency defects found (#8, #9)
+    ├── PROMPTS.md               ← Task 4's own AI-usage log
+    ├── reports-cited/           ← the raw NBomber runs every quoted number comes from
+    └── PetClinic.PerformanceTests/
 ```
 
 `task2-task3-automation/README.md` is the detailed reference for that project (prerequisites,
@@ -37,15 +43,50 @@ every environment variable, full defect/coverage tables, design notes). This fil
 clean machine to a running suite without needing to open it — but it's there for anything this file
 only summarizes.
 
+## Defects found
+
+Nine confirmed defects, all in Billing. #1–#7 came from Task 1's exploratory pass — full
+reproduction detail in [`task1-test-plan/test-plan.md`](task1-test-plan/test-plan.md) §8. #8–#9 came
+from Task 4's concurrency testing, which every other suite here structurally could not have found:
+each of them issues one request at a time by construction, and both defects need two requests to
+overlap. Detail in [`task4-performance/DEFECTS.md`](task4-performance/DEFECTS.md).
+
+| # | Defect | Layer | Automated regression test |
+|---|---|---|---|
+| 1 | Tax computed on the subtotal instead of the discounted taxable amount | API | UI + API |
+| 2 | Invoices can be overpaid — balance goes negative, status stays `PARTIALLY_PAID` | API | UI + API |
+| 3 | `PAID` invoices carrying a non-zero balance | API/data | API (system-wide sweep) |
+| 4 | Disabled account (`former.staff`) can still authenticate and use billing | API | UI + API |
+| 5 | Pagination `Next` stays enabled past the last page | UI only | UI |
+| 6 | Invoice-form owner dropdown capped at the first 100 owners, no search or paging | UI only | **none** — see Known issues |
+| 7 | Due date renders one day early for any viewer in a timezone behind UTC | UI only | UI (2 of 4 timezone cases) |
+| 8 | Invoice-number race — concurrent creates collide on a unique constraint | API | Task 4, Tests 1/4/6 |
+| 9 | Concurrent payments leave a fully paid invoice stuck at `PARTIALLY_PAID` | API | Task 4, Test 2 |
+
+Two things worth pulling out of that table. **#9 is probably the same root cause as #3**, seen from
+the other side of the same race — balance correct while status is wrong, versus status correct while
+balance is wrong; Task 1 could never reproduce #3 on demand, and #9 is the first evidence of a
+mechanism that would explain how it arises at all (reasoning in `DEFECTS.md`). And **#8 needs no load
+at all** — two simultaneous invoice creations failed one of the two in 12 of 12 trials, which is the
+minimum concurrency a real clinic can experience.
+
+One earlier finding was **retracted**: a Task 1 note that `reception`'s token could void an invoice
+did not reproduce on re-verification and is documented as a correction rather than silently dropped —
+see `task2-task3-automation/README.md`'s Known issues.
+
 ## Prerequisites
 
-- **Docker Desktop** (macOS or Windows), with Compose — this is the only hard requirement. No
-  .NET SDK needed on the host if you run everything through Docker.
-- To run the suites directly on the host instead (faster iteration than Docker): [.NET 10
-  SDK](https://dotnet.microsoft.com/download), plus a one-time Playwright browser install after the
+- **Docker Desktop 4.x** (macOS or Windows) with **Compose v2** — enough on its own for Tasks 2 and
+  3, which need no .NET SDK on the host.
+- **[.NET 10 SDK](https://dotnet.microsoft.com/download)** — required for **Task 4**, which is
+  deliberately not containerized so the load generator doesn't compete with the application for the
+  same Docker resource pool. It also lets you run Tasks 2/3 directly on the host for faster
+  iteration; that path additionally needs a one-time **Playwright 1.62.0** browser install after the
   first build (`pwsh src/PetClinic.Tests.Ui/bin/Debug/net10.0/playwright.ps1 install chromium
-  --with-deps`) — see `task2-task3-automation/README.md`'s Prerequisites section for the exact
-  steps and macOS/Linux equivalent.
+  --with-deps`) — see `task2-task3-automation/README.md`'s Prerequisites section for the exact steps
+  and the macOS/Linux equivalent.
+
+So: Docker alone gets you Tasks 2 and 3. Task 4 needs the SDK either way.
 
 ## 1. Start the application under test
 
@@ -73,16 +114,22 @@ log settles:
 
 ## 2. Point the suites at the application
 
-Both suites default to `localhost:8080` (API) / `localhost:8081` (UI) — matching the setup above
-with no configuration needed. If PetClinic runs somewhere else (a different host, port, or inside
-Docker where `localhost` means the container itself), override via environment variables — copy
-`task2-task3-automation/.env.example` to `.env` and edit it, or set them directly:
+All three suites default to `localhost:8080` (API) / `localhost:8081` (UI) — matching the setup
+above, with no configuration needed. If PetClinic runs somewhere else (a different host, port, or
+inside Docker where `localhost` means the container itself), override via environment variables:
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `API_BASE_URL` | `http://localhost:8080` | Where the API readiness check and every API test/fixture call point |
-| `UI_BASE_URL` | `http://localhost:8081` | Where the UI readiness check looks |
-| `UI_BROWSER_URL` | `http://localhost:8081` | Where Playwright actually navigates the browser (kept separate from `UI_BASE_URL` for a CORS-related reason — see `task2-task3-automation/README.md`'s Known issues) |
+| Variable | Default | Used by | Purpose |
+|---|---|---|---|
+| `API_BASE_URL` | `http://localhost:8080` | Tasks 2, 3, 4 | Where the API readiness check and every API test/fixture call point |
+| `UI_BASE_URL` | `http://localhost:8081` | Task 2 | Where the UI readiness check looks |
+| `UI_BROWSER_URL` | `http://localhost:8081` | Task 2 | Where Playwright actually navigates the browser (kept separate from `UI_BASE_URL` for a CORS-related reason — see `task2-task3-automation/README.md`'s Known issues) |
+| `WRITE_RATE_RPS` | `10` | Task 4 | Test 6 only — the fixed write arrival rate, varied across runs to build the scalability curve |
+
+**`.env` is a Docker Compose file, and only that.** Copying `task2-task3-automation/.env.example` to
+`.env` works for `docker compose run`, which picks it up automatically. It does **nothing** for the
+local runner or for Task 4 — both read real environment variables, and neither loads a `.env` file.
+For a host run, export the variables in your shell instead. Note too that `.env.example` ships the
+*Docker* values (`host.docker.internal`); on the host you want `localhost`.
 
 **One thing that's *not* an environment variable:** the seed account credentials (`admin`/`admin123`,
 `reception`/`desk123`, etc.) are hardcoded in
@@ -93,7 +140,7 @@ there's no env var for it.
 
 ## 3. Run the suites
 
-All commands run from `task2-task3-automation/`. Two equivalent ways to run — pick one:
+**Tasks 2 & 3 (UI + API)** — from `task2-task3-automation/`. Two equivalent ways to run, pick one:
 
 ```bash
 # Docker Compose directly — no .NET SDK needed on the host
@@ -108,7 +155,27 @@ dotnet run --project src/PetClinic.Tests.Runner -- all            # both, local
 dotnet run --project src/PetClinic.Tests.Runner -- all --docker   # both, executed inside Docker
 ```
 
-Both suites check the app is reachable before running anything, and fail fast with a clear message
+**Task 4 (performance)** — from `task4-performance/PetClinic.PerformanceTests/`. Requires the .NET
+SDK on the host; deliberately not containerized, so the load generator doesn't compete with the
+application for the same Docker resource pool:
+
+```bash
+dotnet run -c Release -- test1   # invoice creation under ramped load
+dotnet run -c Release -- test2   # concurrent payments against one invoice
+dotnet run -c Release -- test3   # read-heavy invoice list
+dotnet run -c Release -- test4   # mixed read/write
+dotnet run -c Release -- test5   # read ramp (finds where the DB connection pool saturates)
+dotnet run -c Release -- test6   # write scalability at a fixed rate (WRITE_RATE_RPS, default 10)
+dotnet run -c Release -- all     # all six, in order
+```
+
+The capped-resource runs cited in `SUMMARY.md` (API limited to 1 CPU / 1 GiB) come from layering
+[`task4-performance/docker-compose.resource-limits.yml`](task4-performance/docker-compose.resource-limits.yml)
+over the AUT's own compose file — it caps only the `api` container, deliberately, so one variable
+moves at a time. Nothing in the default run path uses it; `SUMMARY.md`'s "Running the tests" section
+has the exact command.
+
+Every suite checks the app is reachable before running anything, and fails fast with a clear message
 (not a wall of connection errors) if it isn't — the fix is always "start PetClinic Pro, then re-run
 the command."
 
@@ -146,6 +213,18 @@ detail) — full detail, including every assertion message and stack trace, is i
 written to `task2-task3-automation/testresults/{ui,api}-report.html` after every run (the local
 runner opens these automatically).
 
+**Task 4 is different** — it isn't pass/fail in the same sense. Each test prints an NBomber stats
+table (request counts, error rate, latency percentiles) and writes a timestamped HTML/CSV/Markdown
+report to `task4-performance/PetClinic.PerformanceTests/reports/`. Tests 1 and 4 are *expected* to
+show a single-digit-to-10% write error rate, and Test 2 is expected to end with a `FAIL — invoice #N
+did not reach a consistent paid state` line: those are the two defects it exists to demonstrate.
+Test 5 ramps read traffic until the database connection pool reaches its configured maximum; it
+should complete with **0 errors** and visibly higher latency than the other tests — p95 anywhere from
+~45ms to ~160ms depending on what else the machine is doing. That spread is itself part of the
+finding rather than instability; `SUMMARY.md` reports all three runs and what separates them. Test 6 is *expected* to fail a
+growing share of writes as `WRITE_RATE_RPS` rises — that curve is the result it exists to produce.
+See [`task4-performance/SUMMARY.md`](task4-performance/SUMMARY.md).
+
 ## 4. Test data between runs, and resetting to a clean state
 
 **Every run creates data and none of it is cleaned up automatically.** Specifically:
@@ -161,6 +240,10 @@ runner opens these automatically).
 - Invoices, line items, and payments created as test fixtures also accumulate — again, this doesn't
   affect correctness (no test depends on a specific total count), it just means the invoice list
   keeps growing.
+- **Task 4 creates noticeably more**: 10 owners and 10 RECEPTIONIST user accounts per run, plus one
+  invoice per write request — roughly **435 create requests across a full `all` run, ~400 of them
+  succeeding**, with Test 6 alone accounting for 200 at its default rate. Nothing depends on a clean
+  baseline, but this is by far the suite most worth resetting after if you run it repeatedly.
 
 **To return to the original seed state**, reset the AUT itself (this submission never does this for
 you, since it isn't this repo's data to discard without being asked):
@@ -181,7 +264,9 @@ known issues (a stale-DOM invoice-ID race, a pagination test that depended on ot
 already created invoices, and the owner-dropdown timing issue described above); see `PROMPTS.md` for
 how each was caught and fixed. What's deliberately out of scope:
 
-- **Task 4 (performance testing)** — not attempted at all.
+- **Task 4's concurrent-payment test is probabilistic** — it reproduces its defect in roughly 9 runs
+  out of 10, since it is deliberately racing the application. A single passing run is not evidence
+  the defect is fixed. See [`task4-performance/DEFECTS.md`](task4-performance/DEFECTS.md).
 - **One confirmed defect has no automated regression test**: the owner-selection cap itself (the
   invoice UI's owner dropdown only shows the first 100 owners, no further pagination or search —
   documented as Defect #6 / S17 in the test plan) is real and reproduced manually, but wasn't turned
@@ -190,6 +275,18 @@ how each was caught and fixed. What's deliberately out of scope:
   boundary cases already covered, and the zero/negative-payment, post-issue-immutability, and
   voided-invoice regression guards) were confirmed manually in Task 1 but not re-automated in Task
   2/3, since nothing in that exploration suggested they were at risk.
+- **Task 4's read-ramp result varies more than the others.** Test 5 at 200 req/s crossed into
+  connection-pool queuing in one of three runs and not in the other two (p95 161ms vs 62ms and 47ms).
+  The pool reaching its maximum is consistent; the latency figure is not, and `SUMMARY.md` reports
+  the range rather than the best single run. Raising `spring.datasource.hikari.maximum-pool-size` and
+  re-running is the obvious next experiment, and is listed there as a follow-up.
+- **`Defect5PaginationTests` gets slower as the database grows.** It clicks `Next` all the way to the
+  true last page, so its runtime scales with the invoice count (~47 clicks at ~470 invoices). Repeated
+  runs stay *correct* — see §4 — but on a heavily-used database this is the slowest UI test by a wide
+  margin. `docker compose down -v` on the AUT brings it back down.
+- **Task 4 exits non-zero whenever any request failed**, which for Tests 1, 4 and 6 is every run, by
+  design — those failures are the defect it exists to demonstrate. Don't wire it into CI as a
+  pass/fail gate without accounting for that.
 - Environment/tooling specifics (CORS handling in Docker, Playwright/image version pinning, why the
   readiness check doesn't retry, why two separate flags were needed to quiet the console) are in
   `task2-task3-automation/README.md`'s "Known issues / design notes" — narrower than what belongs
@@ -203,6 +300,9 @@ kept versus rewritten, and — the part that matters most — what the model got
 caught. Includes a case where a previously documented "confirmed" finding (reception's API token
 could void an invoice) didn't reproduce on re-verification against the running app, and was
 corrected rather than left standing.
+
+**Task 4 keeps its own log** at [`task4-performance/PROMPTS.md`](task4-performance/PROMPTS.md), since
+it was built as a self-contained unit. Both files together cover the whole submission.
 
 ## Assumptions
 
