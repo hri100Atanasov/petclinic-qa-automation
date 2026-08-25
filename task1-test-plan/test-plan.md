@@ -7,7 +7,7 @@
 **Why this module:** it carries direct financial and compliance risk (money changing hands, tax
 and discount calculations, audit trail), has a non-trivial state machine (DRAFT → ISSUED →
 PARTIALLY_PAID / PAID, VOID as a terminal branch), and sits behind role-based access control that
-gates who can issue, amend, void, and take payment. A short exploratory pass surfaced five
+gates who can issue, amend, void, and take payment. A short exploratory pass surfaced seven
 confirmed defects in this area alone (see §8), which is itself a signal that the module's risk is
 higher than average.
 
@@ -117,7 +117,12 @@ weight in the scenario list.
 - Tester's browser/OS clock is set to UTC before running any date-sensitive scenario (due date,
   overdue calculations). The API stores and returns timestamps in UTC, but the UI renders dates in
   the browser's local timezone (per the application's README) — a non-UTC browser can make a
-  date-based assertion (e.g. S1's expected due date) appear to fail when it hasn't.
+  date-based assertion (e.g. S1's expected due date) appear to fail when it hasn't. **Exception:**
+  Defect #7 (§8) shows this assumption breaks down specifically for due-date rendering — a viewer
+  in any timezone behind UTC sees a genuinely wrong calendar day, not a false failure, which is
+  exactly what S18 was designed to surface. This criterion still holds for every other
+  date-sensitive check; it's also the reason a UTC-only manual pass didn't catch Defect #7 in the
+  first place.
 
 ## 7. Exit criteria
 
