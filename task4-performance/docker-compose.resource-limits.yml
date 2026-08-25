@@ -1,0 +1,19 @@
+# Resource cap for the AUT, layered on top of qa-test-automation-task's own
+# docker-compose.yml via a second -f — never edits that repo directly.
+#
+#   docker compose -f ../qa-test-automation-task/docker-compose.yml -f docker-compose.resource-limits.yml up -d
+#
+# Only the API container is capped for now (see PROMPTS.md / task4 notes for
+# why: isolating one variable at a time against the app-level HikariCP pool
+# ceiling and the invoice-number race condition found during the POC, rather
+# than capping API+DB simultaneously and not knowing which one caused a given
+# failure). Values are a deliberately minimal starting point, not tuned to
+# any specific target — the POC's job was to prove the override actually
+# constrains the container, not to find the "right" number yet.
+services:
+  api:
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
