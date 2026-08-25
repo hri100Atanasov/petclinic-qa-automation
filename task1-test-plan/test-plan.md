@@ -73,6 +73,7 @@ Ranked by business impact, based on exploration to date:
 | 4 | PAID invoices can carry a non-zero balance | Breaks the PAID-means-settled invariant that reporting/reconciliation likely relies on | Confirmed, Defect #3 |
 | 5 | Pagination `last` flag not respected by the UI's Next control | Users can page past the end of results; low financial impact but a data-integrity/UX smell that erodes confidence in the rest of the list view | Confirmed, Defect #5 |
 | 6 | Owner selection in the invoice-creation form is capped at the first 100 owners, with no further pagination or search | Caps business capacity — once a clinic has more than 100 registered owners, front-desk staff cannot create an invoice for anyone sorting past the 100th via the UI at all, regardless of role | Confirmed, Defect #6 |
+| 7 | Invoice due date renders as the wrong calendar day for any viewer in a timezone behind UTC | Every invoice due date can display one day earlier than the actual due date for a majority of real-world timezones (all of the Americas and points west of Greenwich); risks a customer paying "late" against a due date the UI itself understated, or staff misjudging what's actually overdue | Confirmed, Defect #7 |
 
 The concentration of confirmed defects around *calculation* and *state-invariant* logic (rather
 than, say, layout) is itself informative: it raises prior for **other arithmetic paths** (e.g.
@@ -124,7 +125,7 @@ weight in the scenario list.
 - Every confirmed defect (§8) has a corresponding scenario demonstrating it, filed with repro
   steps, so the defect is regression-testable once fixed.
 - No **new** untriaged high-severity defect discovered in the last full pass through the scenario
-  list (i.e. the list has stabilized, not that it's defect-free — six defects are already known and
+  list (i.e. the list has stabilized, not that it's defect-free — seven defects are already known and
   accepted as open going into exit).
 - Open questions in §10 are either answered or explicitly carried forward as documented
   assumptions.
@@ -172,6 +173,16 @@ than the ad hoc verification used here.
    with more than 100 owners on file, anyone sorting past the 100th is entirely unreachable from
    this form. Confirmed directly: with over 300 owners in the database, the dropdown rendered
    exactly 100 selectable options (plus the placeholder), well short of the full list.
+7. **Invoice due date renders as the wrong calendar day for a viewer behind UTC.** `dueDate` is
+   returned as a bare, timezone-less date (e.g. `2026-09-24`) — the AUT's own README confirms
+   dates are stored in UTC but rendered in the browser's local timezone. Confirmed directly with
+   Playwright's per-context timezone emulation on the same invoice: viewed from `UTC` or
+   `Pacific/Kiritimati` (UTC+14) it renders correctly as `9/24/2026`; viewed from `Atlantic/Cape_Verde`
+   (UTC-1) or `Pacific/Honolulu` (UTC-10) it renders as `9/23/2026` — one day early. Consistent
+   with the frontend parsing the bare date string as UTC midnight and then formatting it in the
+   viewer's local time: since that's exactly 00:00 UTC, *any* negative offset at all — not just
+   large ones — rolls it back to the previous calendar day. That covers a majority of real-world
+   timezones (all of the Americas and everywhere else west of Greenwich), not an edge case.
 
 ## 9. Scenario list (titles + one-line intent)
 
@@ -221,6 +232,9 @@ Negative / boundary (the higher-value half, given the risk profile):
   UI-level, to be confirmed in Task 2.
 - **S17 — Owner selection in the invoice form is capped at the first 100 owners with no
   pagination.** Directly targets defect #6; UI-level, to be confirmed in Task 2.
+- **S18 — Invoice due date renders as the correct calendar day regardless of viewer timezone.**
+  Directly targets defect #7; UI-level, confirmed in Task 2 with Playwright's per-context timezone
+  emulation across four fixed-offset zones.
 
 S1, S2, S3, S6, S8, S9, and S15 are written up in full (preconditions, steps, test data, expected
 result) in `scenarios-full.md`.
