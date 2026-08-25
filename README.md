@@ -125,7 +125,10 @@ inside Docker where `localhost` means the container itself), override via enviro
 | `API_BASE_URL` | `http://localhost:8080` | Tasks 2, 3, 4 | Where the API readiness check and every API test/fixture call point |
 | `UI_BASE_URL` | `http://localhost:8081` | Task 2 | Where the UI readiness check looks |
 | `UI_BROWSER_URL` | `http://localhost:8081` | Task 2 | Where Playwright actually navigates the browser (kept separate from `UI_BASE_URL` for a CORS-related reason — see `task2-task3-automation/README.md`'s Known issues) |
-| `WRITE_RATE_RPS` | `10` | Task 4 | Test 6 only — the fixed write arrival rate, varied across runs to build the scalability curve |
+
+These three are about *where the application is*. Each project also has its own tuning knobs that
+have nothing to do with locating it — Task 4's load rates, for one; those are documented in
+[`task4-performance/README.md`](task4-performance/README.md) rather than here.
 
 **`.env` is a Docker Compose file, and only that.** Copying `task2-task3-automation/.env.example` to
 `.env` works for `docker compose run`, which picks it up automatically. It does **nothing** for the
@@ -167,7 +170,7 @@ dotnet run -c Release -- test2   # concurrent payments against one invoice
 dotnet run -c Release -- test3   # read-heavy invoice list
 dotnet run -c Release -- test4   # mixed read/write
 dotnet run -c Release -- test5   # read ramp (finds where the DB connection pool saturates)
-dotnet run -c Release -- test6   # write scalability at a fixed rate (WRITE_RATE_RPS, default 10)
+dotnet run -c Release -- test6   # write scalability at a fixed rate
 dotnet run -c Release -- all     # all six, in order
 ```
 
@@ -224,7 +227,8 @@ Test 5 ramps read traffic until the database connection pool reaches its configu
 should complete with **0 errors** and visibly higher latency than the other tests — p95 anywhere from
 ~45ms to ~160ms depending on what else the machine is doing. That spread is itself part of the
 finding rather than instability; `SUMMARY.md` reports all three runs and what separates them. Test 6 is *expected* to fail a
-growing share of writes as `WRITE_RATE_RPS` rises — that curve is the result it exists to produce.
+growing share of writes the harder it is driven — that curve is the result it exists to produce, and
+`task4-performance/README.md` covers how the rate is set if you want to reproduce it.
 See [`task4-performance/SUMMARY.md`](task4-performance/SUMMARY.md).
 
 ## 4. Test data between runs, and resetting to a clean state
