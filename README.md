@@ -13,8 +13,8 @@ task in the brief is optional; this is what was attempted, why, and how to run i
 | 4 — Performance test | **Not attempted** | — |
 | 5 — Setup guide and execution instructions | Done | this file |
 
-Task 4 wasn't attempted — time was spent going deeper on Tasks 1–3 instead (five automated
-defect reproductions, RBAC across four roles at both layers, and a test-data fixture that had to be
+Task 4 wasn't attempted — time was spent going deeper on Tasks 1–3 instead (six automated defect
+reproductions, RBAC across four roles at both layers, and a test-data fixture that had to be
 reworked twice after it broke itself — see "Known issues" below) rather than adding a fourth,
 shallower task.
 
@@ -117,7 +117,7 @@ the command."
 **This is expected, not a sign something's broken:**
 
 ```
-UI suite:  FAILED — 6 passed, 4 failed (of 10)
+UI suite:  FAILED — 8 passed, 6 failed (of 14)
 API suite: FAILED — 9 or 10 passed, 5 or 4 failed (of 14) — see note below
 ```
 
@@ -127,8 +127,10 @@ passing (no test changes needed) the moment the underlying bug is fixed. This mi
 exit criteria: the module doesn't exit "green," it exits with a known, documented, regression-testable
 defect list. The full defect-to-test mapping is in `task2-task3-automation/README.md`'s "What a run
 looks like" section — the short version: tax miscalculation, invoice overpayment, and a disabled
-account that can still log in, in both suites; the UI suite also reproduces the pagination defect,
-and the API suite also reproduces the tax defect's downstream effect on a full paid invoice lifecycle.
+account that can still log in, in both suites; the UI suite also reproduces the pagination defect
+and (in 2 of 4 timezone cases) a due date that renders one day early for any viewer in a timezone
+behind UTC; the API suite also reproduces the tax defect's downstream effect on a full paid invoice
+lifecycle.
 
 **The API suite's exact count varies, and that's expected too, not flakiness in the usual sense:**
 one API test (`Every_Paid_Invoice_Has_A_Zero_Balance`) sweeps every PAID invoice in the database for

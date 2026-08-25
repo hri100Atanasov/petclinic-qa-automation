@@ -80,7 +80,7 @@ WARNING: Overwriting results file: /app/testresults/ui-results.trx
 Results File: /app/testresults/ui-results.trx
 Html test results file : /app/testresults/ui-report.html
 
-Failed!  - Failed:     4, Passed:     6, Skipped:     0, Total:    10, Duration: 29 s - PetClinic.Tests.Ui.dll (net10.0)
+Failed!  - Failed:     6, Passed:     8, Skipped:     0, Total:    14, Duration: 33 s - PetClinic.Tests.Ui.dll (net10.0)
 
 === Running API tests (RestSharp) ===
 Test run for /app/src/PetClinic.Tests.Api/bin/Release/net10.0/PetClinic.Tests.Api.dll (.NETCoreApp,Version=v10.0)
@@ -98,8 +98,8 @@ TRX + HTML reports written to ./testresults
 ```
 
 ("A total of 1 test files matched the specified pattern" refers to the one compiled test assembly
-per suite, not the test count — the real counts are in the `Failed!`/`Passed!` line: `Total: 10` for
-UI, `Total: 14` for API.) The runner (`dotnet run --project src/PetClinic.Tests.Runner -- all`)
+per suite, not the test count — the real counts are in the `Failed!`/`Passed!` line: `Total: 14` for
+both suites, coincidentally.) The runner (`dotnet run --project src/PetClinic.Tests.Runner -- all`)
 produces the same per-suite block, then opens both HTML reports automatically unless `--no-open` is
 passed.
 
@@ -120,9 +120,9 @@ Every run writes, per suite, to `./testresults/`:
 
 ### The UI suite is expected to fail right now — that's by design
 
-Four UI tests deliberately reproduce known, confirmed defects from Task 1
-(`../task1-test-plan/test-plan.md` §8) and are written to assert the *correct* behavior, not the
-app's current behavior — so they fail until the underlying bug is fixed, and start passing (with
+Six UI test cases (across five test methods) deliberately reproduce known, confirmed defects from
+Task 1 (`../task1-test-plan/test-plan.md` §8) and are written to assert the *correct* behavior, not
+the app's current behavior — so they fail until the underlying bug is fixed, and start passing (with
 no test changes needed) the moment it is:
 
 | Test | Defect | Asserts |
@@ -131,11 +131,12 @@ no test changes needed) the moment it is:
 | `Defect2OverpaymentTests` | #2 — an invoice can be overpaid | Balance should never go negative after an overpayment |
 | `Defect4DisabledAccountTests` | #4 — a disabled account can still authenticate | `former.staff` (disabled) should be rejected at login |
 | `Defect5PaginationTests` | #5 — pagination `Next` stays active past the last page | `Next` should be disabled on the true last page |
+| `DueDateTimezoneTests` (2 of 4 cases) | #7 — due date renders as the wrong day for viewers behind UTC | Viewed from `Atlantic/Cape_Verde` (UTC-1) or `Pacific/Honolulu` (UTC-10), the due date should still match the API's stored value — it renders one day early instead. The `UTC` and `Pacific/Kiritimati` (UTC+14) cases pass, isolating the bug to negative UTC offsets specifically |
 
-The other 6 tests (login, the full invoice lifecycle, and 4 RBAC checks) pass and are expected to
-keep passing. This mirrors Task 1's own exit criteria: the module doesn't exit "green," it exits
-with a known, documented, regression-testable defect list — the same philosophy applied to
-automation instead of manual scenarios.
+The other 8 test cases (login, the full invoice lifecycle, 4 RBAC checks, and 2 of the 4 due-date
+timezone cases) pass and are expected to keep passing. This mirrors Task 1's own exit criteria: the
+module doesn't exit "green," it exits with a known, documented, regression-testable defect list —
+the same philosophy applied to automation instead of manual scenarios.
 
 ### The API suite is also expected to fail right now — same reason, deeper layer
 
@@ -218,13 +219,20 @@ Scoped to the Billing module, anchored on Task 1's own risk findings rather than
 
 - **Login + S1 (full lifecycle)** — the positive baseline; proves the UI's rendering pipeline
   surfaces correct computed values through real forms, not just that the API returns them.
-- **Defects #1, #2, #4, #5** — confirmed Task 1 defects that are UI-observable or UI-exclusive
-  (§5's Next button bug can't be caught any other way). See "The UI suite is expected to fail
-  right now" above.
+- **Defects #1, #2, #4, #5, #7** — confirmed defects that are UI-observable or UI-exclusive (§5's
+  Next button bug and §7's date-rendering bug can't be caught any other way — the API stores and
+  returns correct UTC data in both cases; the bug is entirely in how the browser renders it). See
+  "The UI suite is expected to fail right now" above.
 - **RBAC at the UI layer** — new ground Task 1 didn't cover. Task 1 confirmed the *API* rejects
   unauthorized writes (test-plan.md §9, S10-S13); these tests check whether the *UI* actually hides
   those controls for READONLY/VET, or renders one that would then fail — a distinct
   authorization-awareness risk from what's already proven at the API layer.
+- **Defect #7 (due date timezone rendering)** — found while extending the suite, not from Task 1's
+  original exploration: each test case opens its own browser context with a specific `TimezoneId`
+  (Playwright's per-context timezone emulation) rather than the suite's UTC default, checking
+  whether the same invoice's due date still renders correctly. Fixed-offset zones only (Cape Verde,
+  Honolulu, Kiritimati — none observe DST), so the expected result doesn't depend on when the test
+  happens to run.
 
 Left out deliberately: S2/S3 (multi-item totals, partial payments) — solid positive coverage, but
 at the UI layer they mostly re-prove "the screen displays what the API already computed," which is
@@ -292,6 +300,16 @@ automatically.
 
 ## Known issues / design notes
 
+- **Every UI test's browser context defaults to `TimezoneId: "UTC"` and `Locale: "en-US"`**
+  (`PetClinicPageTest.ContextOptions()`), so the suite's correctness doesn't depend on whatever
+  timezone/regional settings happen to be set on the machine running it. This was previously just a
+  manual assumption (test-plan.md's entry criteria: "tester's browser/OS clock is set to UTC") —
+  confirmed live while building `DueDateTimezoneTests` that it actually mattered: without pinning
+  the locale specifically, Chromium fell back to the host OS's regional date format (e.g.
+  "23.09.2026 г." on a Bulgarian-locale machine, not "9/23/2026"), which would have made a
+  date-parsing assertion fail for reasons unrelated to what it was testing. `DueDateTimezoneTests`
+  deliberately overrides both per test case via its own `NewContext(...)` call, which bypasses this
+  default entirely — each case re-specifies `Locale` for that reason.
 - **PetClinic's CORS policy rejects `host.docker.internal` as an Origin, but accepts
   `localhost`.** Confirmed directly: the same login request returns `200` with
   `Origin: http://localhost:8081` and `403 Invalid CORS request` with
