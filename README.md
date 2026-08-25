@@ -23,7 +23,8 @@ that the other suites structurally cannot reproduce.
 ```
 petclinic-qa-automation/
 ├── README.md                    ← you are here (Task 5)
-├── PROMPTS.md                   ← AI-usage log (verbatim prompts, what was kept/changed/caught)
+├── PROMPTS-SUMMARY.md           ← the "what the model got wrong" passages from both logs, verbatim
+├── PROMPTS-TASK-1-2-3.md        ← AI-usage log for Tasks 1/2/3/5 (verbatim prompts, in order)
 ├── task1-test-plan/             ← Task 1: test plan + scenarios (Billing module)
 │   ├── test-plan.md
 │   └── scenarios-full.md
@@ -31,9 +32,10 @@ petclinic-qa-automation/
 │   ├── README.md                ← detailed setup/run/coverage docs for this project specifically
 │   └── src/
 └── task4-performance/           ← Task 4: load/concurrency testing (NBomber)
+    ├── README.md                ← how to run the performance suite
     ├── SUMMARY.md               ← load model, results, conclusions
     ├── DEFECTS.md               ← the two concurrency defects found (#8, #9)
-    ├── PROMPTS.md               ← Task 4's own AI-usage log
+    ├── PROMPTS-TASK-4.md        ← Task 4's own AI-usage log
     ├── reports-cited/           ← the raw NBomber runs every quoted number comes from
     └── PetClinic.PerformanceTests/
 ```
@@ -169,11 +171,11 @@ dotnet run -c Release -- test6   # write scalability at a fixed rate (WRITE_RATE
 dotnet run -c Release -- all     # all six, in order
 ```
 
-The capped-resource runs cited in `SUMMARY.md` (API limited to 1 CPU / 1 GiB) come from layering
-[`task4-performance/docker-compose.resource-limits.yml`](task4-performance/docker-compose.resource-limits.yml)
-over the AUT's own compose file — it caps only the `api` container, deliberately, so one variable
-moves at a time. Nothing in the default run path uses it; `SUMMARY.md`'s "Running the tests" section
-has the exact command.
+[`task4-performance/README.md`](task4-performance/README.md) is the detailed reference for this
+project — environment variables, what each run is expected to produce, test-data behaviour, and how
+to reproduce the capped-resource runs `SUMMARY.md` quotes (via
+[`docker-compose.resource-limits.yml`](task4-performance/docker-compose.resource-limits.yml), which
+nothing in the default run path uses).
 
 Every suite checks the app is reachable before running anything, and fails fast with a clear message
 (not a wall of connection errors) if it isn't — the fix is always "start PetClinic Pro, then re-run
@@ -261,8 +263,8 @@ is kept across restarts.
 
 No currently-known flaky tests — three were found and fixed during this work rather than left as
 known issues (a stale-DOM invoice-ID race, a pagination test that depended on other tests having
-already created invoices, and the owner-dropdown timing issue described above); see `PROMPTS.md` for
-how each was caught and fixed. What's deliberately out of scope:
+already created invoices, and the owner-dropdown timing issue described above); see
+`PROMPTS-TASK-1-2-3.md` for how each was caught and fixed. What's deliberately out of scope:
 
 - **Task 4's concurrent-payment test is probabilistic** — it reproduces its defect in roughly 9 runs
   out of 10, since it is deliberately racing the application. A single passing run is not evidence
@@ -295,14 +297,16 @@ how each was caught and fixed. What's deliberately out of scope:
 ## AI usage
 
 Used throughout, with every finding verified against the running application rather than taken on
-faith — see [`PROMPTS.md`](PROMPTS.md) for the full, verbatim log: every prompt in order, what was
-kept versus rewritten, and — the part that matters most — what the model got wrong and how each was
-caught. Includes a case where a previously documented "confirmed" finding (reception's API token
+faith. Start with [`PROMPTS-SUMMARY.md`](PROMPTS-SUMMARY.md), which collects the "what the model got
+wrong" passages from both logs verbatim in one place — that's the part the brief says it weighs most
+heavily. The full logs behind it are [`PROMPTS-TASK-1-2-3.md`](PROMPTS-TASK-1-2-3.md) (Tasks 1/2/3/5)
+and [`task4-performance/PROMPTS-TASK-4.md`](task4-performance/PROMPTS-TASK-4.md): every prompt in
+order, what was kept versus rewritten, and what the model got wrong and how each was caught. Includes a case where a previously documented "confirmed" finding (reception's API token
 could void an invoice) didn't reproduce on re-verification against the running app, and was
 corrected rather than left standing.
 
-**Task 4 keeps its own log** at [`task4-performance/PROMPTS.md`](task4-performance/PROMPTS.md), since
-it was built as a self-contained unit. Both files together cover the whole submission.
+Task 4 keeps its own log because it was built as a self-contained unit; the two logs together cover
+the whole submission.
 
 ## Assumptions
 

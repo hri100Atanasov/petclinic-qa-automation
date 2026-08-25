@@ -1,19 +1,21 @@
-# PROMPTS.md — Task 4 (Performance testing)
+# Prompts — Task 4 (Performance testing)
 
 This file logs the AI-assisted portion of Task 4 specifically, kept separate from the top-level
-`PROMPTS.md` because Task 4 was run as its own self-contained unit rather than folded into the same
-log as Tasks 1-3. Same rules as the top-level file: prompts pasted verbatim, in order, with what the
+[`PROMPTS-TASK-1-2-3.md`](../PROMPTS-TASK-1-2-3.md) because Task 4 was run as its own self-contained
+unit rather than folded into the same log as Tasks 1-3. Same rules as the top-level file: prompts pasted verbatim, in order, with what the
 model produced, what was kept vs. corrected, and what the model got wrong caught against the running
 application.
 
 **Ordering:** the prompts below are numbered 1-10 within Task 4, and chronologically they follow
-Prompt 56 in the top-level [`PROMPTS.md`](../PROMPTS.md). The two files together cover the whole
-submission.
+Prompt 56 in the top-level [`PROMPTS-TASK-1-2-3.md`](../PROMPTS-TASK-1-2-3.md). The two files
+together cover the whole submission. Both files were named `PROMPTS.md` for most of the work and
+renamed at the end; entries below referring to "`PROMPTS.md`" mean whichever file that was at the
+time, left as written rather than retroactively edited.
 
 **A naming note.** Task 4's two defects were called "Performance Defect #1/#2" while this work was
 in progress, and the entries below still say that — it's a chronological log, so retroactively
 editing them would falsify the record. They were renumbered **#8** and **#9** in the final review
-pass (top-level `PROMPTS.md`, Prompt 57) to put every defect in the submission on one sequence.
+pass (`PROMPTS-TASK-1-2-3.md`, Prompt 57) to put every defect in the submission on one sequence.
 Read "#1" as "#8" and "#2" as "#9" below.
 
 ## Tools / models used

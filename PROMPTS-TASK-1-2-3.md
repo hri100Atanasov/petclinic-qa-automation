@@ -1,4 +1,4 @@
-# PROMPTS.md
+# Prompts — Tasks 1, 2, 3 and 5
 
 This file logs the AI-assisted portion of this submission, as required by the assignment brief.
 
@@ -16,7 +16,9 @@ Prompts are pasted verbatim, in the order they were given, under the task they r
 - What I kept as-is, and what I rewrote or corrected myself
 - What the model got wrong, and how I caught it against the running application — called out under a **What the model got wrong** heading wherever it happened, since that's the part the brief weighs most heavily
 
-**Task 4 keeps its own log.** Task 4 (performance) was built as a self-contained unit, so its prompts live in [`task4-performance/PROMPTS.md`](task4-performance/PROMPTS.md), numbered 1–10 there. Chronologically they follow Prompt 56 below. The two files together cover the whole submission.
+**Task 4 keeps its own log.** Task 4 (performance) was built as a self-contained unit, so its prompts live in [`task4-performance/PROMPTS-TASK-4.md`](task4-performance/PROMPTS-TASK-4.md), numbered 1–10 there. Chronologically they follow Prompt 56 below. The two files together cover the whole submission.
+
+**A note on this file's name.** It was called `PROMPTS.md` for most of the work and was renamed to `PROMPTS-TASK-1-2-3.md` at the end, once Task 4's separate log made a single generic name ambiguous. Entries below that refer to "`PROMPTS.md`" mean *this* file under its old name — they are left as written rather than retroactively edited, on the same principle as everything else here. [`PROMPTS-SUMMARY.md`](PROMPTS-SUMMARY.md) at the repo root collects the "what the model got wrong" passages from both logs, verbatim, for anyone who wants those without reading the full log.
 
 ---
 

@@ -76,7 +76,7 @@ public class RbacTests
     }
 
     /// <summary>
-    /// Reclassified after live re-verification (see PROMPTS.md Prompt 42): the
+    /// Reclassified after live re-verification (see PROMPTS-TASK-1-2-3.md Prompt 42): the
     /// README previously documented this as a confirmed 200/defect from Task 1,
     /// but re-testing against the currently running app returns 403 consistently
     /// on both DRAFT and ISSUED invoices, with an admin void succeeding normally
