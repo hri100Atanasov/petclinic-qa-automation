@@ -20,7 +20,7 @@ namespace PetClinic.PerformanceTests.Scenarios;
 ///
 /// **Why reads.** GET /api/invoices is the only endpoint measured here with a
 /// 0% error rate. Ramping writes would conflate capacity limits with the
-/// invoice-number race (Performance Defect #1), which already fails ~10% of
+/// invoice-number race (Defect #8, DEFECTS.md), which already fails ~10% of
 /// writes at trivial load and roughly half at 50 req/s — any error curve would
 /// be that defect, not saturation. Reads isolate capacity cleanly.
 ///

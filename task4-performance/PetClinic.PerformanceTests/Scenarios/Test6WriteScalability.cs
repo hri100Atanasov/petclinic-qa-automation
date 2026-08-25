@@ -18,7 +18,7 @@ namespace PetClinic.PerformanceTests.Scenarios;
 /// generic Spring Boot configuration ceiling, not a property of this
 /// application's design. Ramping writes instead exercises the path where this
 /// application is actually architecturally weak: invoice-number allocation is
-/// not concurrency-safe (Performance Defect #1), so added concurrency does not
+/// not concurrency-safe (Defect #8, DEFECTS.md), so added concurrency does not
 /// buy added throughput, it buys collisions.
 ///
 /// **Every failure here is self-attributing**, which is the other reason to
